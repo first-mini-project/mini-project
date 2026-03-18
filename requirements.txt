@@ -1,0 +1,7 @@
+flask>=3.0.3
+anthropic>=0.31.0
+openai>=1.35.0
+gtts>=2.5.1
+requests>=2.32.3
+python-dotenv>=1.0.1
+Pillow>=10.4.0

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}그림 그리기 - {{ word.korean }}{% endblock %}
+{% block nav_title %}그림 그리기 🎨{% endblock %}
+
+{% block content %}
+<div class="container drawing-page">
+
+  <!-- 단어 표시 -->
+  <div class="word-display fade-in">
+    <div style="display:flex; align-items:center; gap:16px;">
+      <span class="word-emoji">{{ word.emoji }}</span>
+      <div>
+        <div class="word-korean">{{ word.korean }}</div>
+        <span class="word-english">{{ word.english }}</span>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-purple btn-sm" id="help-btn"
+              data-korean="{{ word.korean }}"
+              data-english="{{ word.english }}">
+        🤔 도와주세요!
+      </button>
+      <a href="/draw" class="btn btn-white btn-sm">🔄 다른 단어</a>
+    </div>
+  </div>
+
+  <!-- 그리기 레이아웃 -->
+  <div class="drawing-layout">
+
+    <!-- 캔버스 -->
+    <div id="canvas-container" class="fade-in">
+      <canvas id="drawing-canvas"></canvas>
+    </div>
+
+    <!-- 도구 패널 -->
+    <div class="drawing-tools fade-in">
+
+      <div class="tool-label">🎨 색상</div>
+      <div class="color-grid">
+        {% set colors = [
+          ('#E74C3C','빨강'), ('#E67E22','주황'), ('#F1C40F','노랑'),
+          ('#2ECC71','초록'), ('#3498DB','파랑'), ('#9B59B6','보라'),
+          ('#FF69B4','분홍'), ('#8B4513','갈색'), ('#1ABC9C','청록'),
+          ('#F39C12','황금'), ('#333333','검정'), ('#FFFFFF','흰색')
+        ] %}
+        {% for color, name in colors %}
+        <button class="color-btn" data-color="{{ color }}"
+                style="background:{{ color }}{% if color == '#FFFFFF' %}; border: 2px solid #ddd{% endif %}"
+                title="{{ name }}"></button>
+        {% endfor %}
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <div class="tool-label">✏️ 크기</div>
+      <div class="size-btns">
+        <button class="size-btn size-btn-s" data-size="4">
+          <span class="size-dot" style="width:6px;height:6px;"></span>
+        </button>
+        <button class="size-btn size-btn-m" data-size="8">
+          <span class="size-dot" style="width:10px;height:10px;"></span>
+        </button>
+        <button class="size-btn size-btn-l" data-size="18">
+          <span class="size-dot" style="width:16px;height:16px;"></span>
+        </button>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <button class="btn btn-white btn-sm" id="eraser-btn" style="width:100%">
+        🧹 지우개
+      </button>
+      <button class="btn btn-white btn-sm" id="undo-btn" style="width:100%">
+        ↩️ 되돌리기
+      </button>
+      <button class="btn btn-white btn-sm" id="clear-btn" style="width:100%">
+        🗑️ 전체 지우기
+      </button>
+
+    </div>
+  </div>
+
+  <!-- 하단 버튼 -->
+  <div class="drawing-actions fade-in">
+    <button class="btn btn-green btn-big" id="save-btn" data-word-id="{{ word.id }}">
+      ✅ 다 그랬어요!
+    </button>
+    <a href="/main" class="btn btn-white">← 메인으로</a>
+  </div>
+
+</div>
+
+<!-- 도움말 모달 (AI 참고 이미지) -->
+<div class="help-modal" id="help-modal">
+  <div class="help-modal-box">
+    <h3 style="font-size:1.3rem; margin-bottom:8px">{{ word.emoji }} {{ word.korean }} 참고 그림</h3>
+    <p style="font-size:0.9rem; color:#888; margin-bottom:12px">AI가 그린 그림을 참고해서 그려봐요!</p>
+
+    <div id="help-loading" style="padding:40px; color:#aaa; font-size:3rem; text-align:center;">
+      ✨<br><span style="font-size:0.9rem">AI가 그림을 그리고 있어요...</span>
+    </div>
+
+    <img id="help-image" alt="참고 이미지" style="display:none; width:100%; border-radius:12px;">
+
+    <button class="btn btn-pink" id="help-modal-close" style="width:100%; margin-top:12px">
+      닫기
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/canvas.js') }}"></script>
+{% endblock %}
