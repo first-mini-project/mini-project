@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}우리 AI 동화 만들기{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+</head>
+<body>
+
+{% block nav %}
+<nav class="nav">
+  <a href="/" class="nav-home" title="처음으로">🏠</a>
+  <span class="nav-title">{% block nav_title %}우리 AI 동화 만들기{% endblock %}</span>
+  <a href="/library" class="btn btn-sm btn-yellow" style="text-decoration:none">📚 내 도서관</a>
+</nav>
+{% endblock %}
+
+{% block content %}{% endblock %}
+
+<div class="toast" id="toast"></div>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

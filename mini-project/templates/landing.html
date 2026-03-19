@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>우리 AI 동화 만들기</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    /* 별 파티클 */
+    .stars {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 0;
+    }
+    .star {
+      position: absolute;
+      font-size: 1.2rem;
+      animation: twinkle var(--dur) ease-in-out infinite;
+      animation-delay: var(--delay);
+      opacity: 0;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 0; transform: scale(0.5); }
+      50%       { opacity: 1; transform: scale(1.2); }
+    }
+  </style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+
+<main class="landing">
+  <span class="landing-castle">🏰</span>
+
+  <h1 class="landing-title">우리 AI 동화 만들기</h1>
+  <p class="landing-subtitle">나만의 그림으로 특별한 동화를 만들어봐요! ✨</p>
+
+  <a href="/main" class="btn btn-yellow btn-big start-btn">
+    ✨ START ✨
+  </a>
+</main>
+
+<script>
+  // 별 파티클 생성
+  const stars = document.getElementById('stars');
+  const emojis = ['⭐','🌟','✨','💫','🌙','☁️','🌈'];
+  for (let i = 0; i < 18; i++) {
+    const s = document.createElement('span');
+    s.className = 'star';
+    s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    s.style.left  = Math.random() * 100 + '%';
+    s.style.top   = Math.random() * 100 + '%';
+    s.style.setProperty('--dur',   (2 + Math.random() * 3) + 's');
+    s.style.setProperty('--delay', (Math.random() * 3) + 's');
+    stars.appendChild(s);
+  }
+</script>
+</body>
+</html>
