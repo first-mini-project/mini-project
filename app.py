@@ -2,8 +2,39 @@ import os
 import json
 import uuid
 import base64
+import subprocess
+import sys
 from flask import (Flask, render_template, request, jsonify,
                    send_file, redirect, url_for, abort)
+
+# ─── torch 자동 설치 (없을 때만) ─────────────────────────────────────────────
+def _ensure_dependencies():
+    # torch (CUDA 버전)
+    try:
+        import torch
+    except ImportError:
+        print("[설치] torch 설치 중 (최초 1회, 시간이 걸려요)...")
+        subprocess.check_call([
+            sys.executable, '-m', 'pip', 'install',
+            'torch', 'torchvision',
+            '--index-url', 'https://download.pytorch.org/whl/cu121',
+            '--quiet'
+        ])
+        print("[설치] torch 완료!")
+
+    # diffusers / transformers / accelerate
+    missing = []
+    for pkg in ['diffusers', 'transformers', 'accelerate']:
+        try:
+            __import__(pkg)
+        except ImportError:
+            missing.append(pkg)
+    if missing:
+        print(f"[설치] {', '.join(missing)} 설치 중...")
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet'] + missing)
+        print("[설치] 완료!")
+
+_ensure_dependencies()
 
 from config import Config
 import database as db
@@ -51,7 +82,7 @@ def draw_word(word_id):
 
 @app.route('/collection')
 def collection():
-    """그림 모음장 - 그림 선택해서 동화 만들기"""
+    """그림 모음장 - 그린 그림 선택해서 동화 만들기"""
     drawings = db.get_all_drawings()
     return render_template('collection.html', drawings=drawings)
 
@@ -152,19 +183,25 @@ def api_generate_story():
     keywords = list(dict.fromkeys([d['korean'] for d in drawings]))
 
     try:
-        # 1. Claude로 동화 생성
-        story_data = ai_service.generate_fairy_tale(keywords)
+        # 1. Gemini로 동화 생성
+        story_data = ai_service.generate_fairy_tale(keywords, drawings)
 
-        # 2. DALL-E로 일러스트 생성
+        # 2. HuggingFace SDXL로 장면 배경 이미지 병렬 생성
+        if story_data.get('scene_data'):
+            story_data['scene_data'] = image_service.generate_scene_bgs_parallel(
+                story_data['scene_data']
+            )
+
+        # 3. DALL-E로 일러스트 생성 (OpenAI 키 없으면 skip)
         illustration_path = image_service.generate_story_illustration(
             story_data['title'], keywords
         )
 
-        # 3. gTTS로 음성 생성 (어린이용 - 약간 느리게)
+        # 4. gTTS로 음성 생성
         full_text = f"{story_data['title']}. {story_data['content']} {story_data.get('moral', '')}"
         audio_path = tts_service.generate_tts(full_text, slow=False)
 
-        # 4. DB 저장
+        # 5. DB 저장
         story_id = db.save_story(
             title=story_data['title'],
             content=story_data['content'],
@@ -172,7 +209,8 @@ def api_generate_story():
             keywords=keywords,
             drawing_ids=[d['id'] for d in drawings],
             illustration_path=illustration_path,
-            audio_path=audio_path
+            audio_path=audio_path,
+            scene_data=story_data.get('scene_data')
         )
 
         return jsonify({'success': True, 'story_id': story_id})
@@ -211,8 +249,9 @@ if __name__ == '__main__':
     print("=" * 50)
     print("AI Fairy Tale App Starting!")
     print("=" * 50)
-    print(f"Anthropic API: {'SET' if Config.ANTHROPIC_API_KEY else 'NOT SET - check .env'}")
-    print(f"OpenAI API:    {'SET' if Config.OPENAI_API_KEY else 'NOT SET - no image gen'}")
+    print(f"Gemini API:    {'SET ✓' if Config.GEMINI_API_KEY    else 'NOT SET - check .env'}")
+    print(f"Anthropic API: {'SET ✓' if Config.ANTHROPIC_API_KEY else 'NOT SET (fallback)'}")
+    print(f"OpenAI API:    {'SET ✓' if Config.OPENAI_API_KEY    else 'NOT SET - no image gen'}")
     print("URL: http://localhost:5000")
     print("=" * 50)
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    app.run(debug=False, port=5000, host='0.0.0.0')

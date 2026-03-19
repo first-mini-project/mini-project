@@ -3,8 +3,95 @@ import uuid
 import requests
 import base64
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config import Config
+
+# ─── 로컬 SDXL-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
+_pipe = None
+
+def _get_pipe():
+    global _pipe
+    if _pipe is not None:
+        return _pipe
+    try:
+        import torch
+        from diffusers import AutoPipelineForText2Image
+        print("[로컬 SD] 모델 로딩 중 (최초 1회)...")
+        _pipe = AutoPipelineForText2Image.from_pretrained(
+            'stabilityai/sdxl-turbo',
+            torch_dtype=torch.float16,
+            variant='fp16',
+        ).to('cuda')
+        print("[로컬 SD] 모델 로딩 완료!")
+    except Exception as e:
+        print(f"[로컬 SD] 로딩 실패: {e}")
+        _pipe = None
+    return _pipe
+
+
+def generate_scene_bg(bg_text: str) -> str | None:
+    """
+    로컬 SDXL-Turbo로 장면 배경 이미지를 생성하고 저장합니다.
+    Returns: 'static/generated/bgs/bg_xxx.jpg' or None
+    """
+    if not bg_text:
+        return None
+
+    prompt = (
+        bg_text
+        + ", children's storybook illustration, watercolor art style,"
+        + " soft pastel colors, magical whimsical background scenery,"
+        + " detailed environment, no characters, no people, no animals, no text, 2D illustration"
+    )
+
+    try:
+        pipe = _get_pipe()
+        if pipe is None:
+            return None
+
+        import torch
+        image = pipe(
+            prompt=prompt,
+            num_inference_steps=1,
+            guidance_scale=0.0,
+            height=512, width=512,
+        ).images[0]
+
+        filename = f"bg_{uuid.uuid4().hex[:16]}.jpg"
+        filepath = os.path.join(Config.BGS_DIR, filename)
+        image.save(filepath, format='JPEG', quality=90)
+        print(f"[로컬 SD BG] 생성 완료: {filename}")
+        return f"static/generated/bgs/{filename}"
+
+    except Exception as e:
+        print(f"[로컬 SD BG 오류] {e}")
+    return None
+
+
+def generate_scene_bgs_parallel(scene_data: list) -> list:
+    """
+    scene_data의 각 장면에 대해 배경 이미지를 순차 생성합니다.
+    (GPU 메모리 충돌 방지를 위해 순차 처리)
+    """
+    if not scene_data:
+        return scene_data
+
+    indices = [i for i, s in enumerate(scene_data) if s.get('bg')]
+    if not indices:
+        return scene_data
+
+    # GPU는 순차 처리 (병렬 시 VRAM 초과 위험)
+    for i in indices:
+        try:
+            path = generate_scene_bg(scene_data[i]['bg'])
+            if path:
+                scene_data[i]['bg_image'] = path
+                print(f"[BG scene {i}] {path}")
+        except Exception as e:
+            print(f"[BG scene {i} 실패] {e}")
+
+    return scene_data
 
 
 def generate_reference_image(korean_word: str, english_word: str, image_prompt: str = None) -> str | None:
