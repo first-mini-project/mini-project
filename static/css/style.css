@@ -583,6 +583,10 @@ body::before {
   box-shadow: 0 0 0 4px rgba(255,107,157,0.3);
   transform: translateY(-4px);
 }
+/* 플로팅 오버레이 내 카드: JS가 transform 직접 제어 (CSS hover/selected transform 비활성화) */
+#float-overlay .drawing-card:hover    { transform: none; box-shadow: none; }
+#float-overlay .drawing-card.selected { transform: none; }
+
 .drawing-card.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
 .drawing-card img {

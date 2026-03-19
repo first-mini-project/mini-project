@@ -31,8 +31,11 @@ def _ensure_dependencies():
             missing.append(pkg)
     if missing:
         print(f"[설치] {', '.join(missing)} 설치 중...")
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet'] + missing)
-        print("[설치] 완료!")
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet'] + missing)
+            print("[설치] 완료!")
+        except Exception as e:
+            print(f"[설치 실패 - 무시하고 계속] {e}")
 
 _ensure_dependencies()
 
@@ -47,6 +50,7 @@ db.init_db()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 app.config['JSON_AS_ASCII'] = False
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 
 # ─── 페이지 라우트 ────────────────────────────────────────────────────────────
@@ -264,4 +268,4 @@ if __name__ == '__main__':
     print(f"OpenAI API:    {'SET ✓' if Config.OPENAI_API_KEY    else 'NOT SET - no image gen'}")
     print("URL: http://localhost:5000")
     print("=" * 50)
-    app.run(debug=False, port=5000, host='0.0.0.0')
+    app.run(debug=True, port=5000, host='0.0.0.0')
