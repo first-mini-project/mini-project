@@ -86,6 +86,7 @@ def init_db():
                 drawing_ids TEXT NOT NULL,
                 illustration_path TEXT,
                 audio_path TEXT,
+                scene_data TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         ''')
@@ -96,6 +97,12 @@ def init_db():
                     'INSERT INTO words (korean, english, emoji, category) VALUES (?, ?, ?, ?)',
                     (word['korean'], word['english'], word['emoji'], word['category'])
                 )
+    # 기존 DB 마이그레이션: scene_data 컬럼이 없으면 추가
+    try:
+        with get_db() as conn:
+            conn.execute("ALTER TABLE stories ADD COLUMN scene_data TEXT")
+    except Exception:
+        pass  # 이미 존재하면 무시
 
 
 # ─── CRUD Helpers ────────────────────────────────────────────────────────────
@@ -116,6 +123,58 @@ def get_all_words():
     with get_db() as conn:
         rows = conn.execute('SELECT * FROM words ORDER BY category, korean').fetchall()
         return [dict(r) for r in rows]
+
+
+def get_words_with_latest_drawing():
+    """모든 단어 + 각 단어의 최신 그림(없으면 None)을 반환합니다."""
+    with get_db() as conn:
+        rows = conn.execute('''
+            SELECT w.id, w.korean, w.english, w.emoji, w.category,
+                   d.id   AS drawing_id,
+                   d.file_path AS drawing_path,
+                   d.created_at AS drawn_at
+            FROM words w
+            LEFT JOIN drawings d
+              ON d.word_id = w.id
+              AND d.created_at = (
+                  SELECT MAX(d2.created_at) FROM drawings d2 WHERE d2.word_id = w.id
+              )
+            ORDER BY w.category, w.korean
+        ''').fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_words_by_ids(word_ids):
+    """word_id 목록으로 단어 정보를 반환합니다 (순서 보존)."""
+    if not word_ids:
+        return []
+    placeholders = ','.join('?' * len(word_ids))
+    with get_db() as conn:
+        rows = conn.execute(
+            f'SELECT * FROM words WHERE id IN ({placeholders})', word_ids
+        ).fetchall()
+        rows_map = {row['id']: dict(row) for row in rows}
+        return [rows_map[i] for i in word_ids if i in rows_map]
+
+
+def get_latest_drawings_for_words(word_ids):
+    """word_id 목록에서 각 단어의 최신 그림을 반환합니다 (그림 없는 단어는 제외)."""
+    if not word_ids:
+        return []
+    placeholders = ','.join('?' * len(word_ids))
+    with get_db() as conn:
+        rows = conn.execute(f'''
+            SELECT d.id, d.word_id, d.image_data, d.file_path, d.created_at,
+                   w.korean, w.english, w.emoji
+            FROM drawings d JOIN words w ON d.word_id = w.id
+            WHERE d.word_id IN ({placeholders})
+              AND d.created_at = (
+                  SELECT MAX(d2.created_at) FROM drawings d2 WHERE d2.word_id = d.word_id
+              )
+        ''', word_ids).fetchall()
+        rows_map = {row['word_id']: dict(row) for row in rows}
+        # word_ids 순서를 유지하되 그림 없는 단어는 None으로
+        return [rows_map.get(wid) for wid in word_ids]
 
 
 def save_drawing(word_id, image_data, file_path=None):
@@ -154,25 +213,28 @@ def get_drawings_by_ids(drawing_ids):
     placeholders = ','.join('?' * len(drawing_ids))
     with get_db() as conn:
         rows = conn.execute(f'''
-            SELECT d.id, d.word_id, d.file_path, d.created_at,
+            SELECT d.id, d.word_id, d.image_data, d.file_path, d.created_at,
                    w.korean, w.english, w.emoji
             FROM drawings d JOIN words w ON d.word_id = w.id
             WHERE d.id IN ({placeholders})
         ''', drawing_ids).fetchall()
-        return [dict(r) for r in rows]
+        # 선택 순서(drawing_ids 순서)를 유지하여 반환
+        rows_map = {row['id']: dict(row) for row in rows}
+        return [rows_map[i] for i in drawing_ids if i in rows_map]
 
 
 def save_story(title, content, moral, keywords, drawing_ids,
-               illustration_path=None, audio_path=None):
+               illustration_path=None, audio_path=None, scene_data=None):
     with get_db() as conn:
         cursor = conn.execute(
             '''INSERT INTO stories
-               (title, content, moral, keywords, drawing_ids, illustration_path, audio_path)
-               VALUES (?, ?, ?, ?, ?, ?, ?)''',
+               (title, content, moral, keywords, drawing_ids, illustration_path, audio_path, scene_data)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
             (title, content, moral,
              json.dumps(keywords, ensure_ascii=False),
              json.dumps(drawing_ids),
-             illustration_path, audio_path)
+             illustration_path, audio_path,
+             json.dumps(scene_data, ensure_ascii=False) if scene_data else None)
         )
         return cursor.lastrowid
 
@@ -185,6 +247,7 @@ def get_story(story_id):
         story = dict(row)
         story['keywords'] = json.loads(story['keywords'])
         story['drawing_ids'] = json.loads(story['drawing_ids'])
+        story['scene_data'] = json.loads(story['scene_data']) if story.get('scene_data') else None
         return story
 
 

@@ -1,7 +1,14 @@
 flask>=3.0.3
+google-genai>=1.0.0
 anthropic>=0.31.0
 openai>=1.35.0
 gtts>=2.5.1
 requests>=2.32.3
 python-dotenv>=1.0.1
 Pillow>=10.4.0
+# 로컬 이미지 생성 (SDXL-Turbo) — GPU 필요
+# torch는 CUDA 버전으로 별도 설치:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+diffusers>=0.37.0
+transformers>=4.0.0
+accelerate>=0.20.0
