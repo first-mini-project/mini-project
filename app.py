@@ -230,6 +230,16 @@ def api_delete_story(story_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/story/<int:story_id>/read', methods=['POST'])
+def api_mark_story_read(story_id):
+    """동화를 읽음 처리합니다."""
+    try:
+        db.mark_story_read(story_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/words')
 def api_words():
     return jsonify(db.get_all_words())

@@ -87,6 +87,7 @@ def init_db():
                 illustration_path TEXT,
                 audio_path TEXT,
                 scene_data TEXT,
+                is_read INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         ''')
@@ -97,10 +98,16 @@ def init_db():
                     'INSERT INTO words (korean, english, emoji, category) VALUES (?, ?, ?, ?)',
                     (word['korean'], word['english'], word['emoji'], word['category'])
                 )
-    # 기존 DB 마이그레이션: scene_data 컬럼이 없으면 추가
+    # 기존 DB 마이그레이션: scene_data 및 is_read 컬럼 추가
     try:
         with get_db() as conn:
             conn.execute("ALTER TABLE stories ADD COLUMN scene_data TEXT")
+    except Exception:
+        pass  # 이미 존재하면 무시
+
+    try:
+        with get_db() as conn:
+            conn.execute("ALTER TABLE stories ADD COLUMN is_read INTEGER DEFAULT 0")
     except Exception:
         pass  # 이미 존재하면 무시
 
@@ -266,3 +273,8 @@ def get_all_stories():
 def delete_story(story_id):
     with get_db() as conn:
         conn.execute('DELETE FROM stories WHERE id=?', (story_id,))
+
+
+def mark_story_read(story_id):
+    with get_db() as conn:
+        conn.execute('UPDATE stories SET is_read = 1 WHERE id=?', (story_id,))

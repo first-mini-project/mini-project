@@ -1,64 +1,37 @@
 {% extends "base.html" %}
-{% block title %}내 동화 도서관{% endblock %}
-{% block nav_title %}내 동화 도서관 📚{% endblock %}
+{% block title %}나만의 도서관{% endblock %}
+{% block nav_title %}나만의 도서관 📚{% endblock %}
 
 {% block content %}
-<div class="container library-page">
+<!-- React Mount Point -->
+<div id="bookshelf-root"></div>
 
-  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
-    <h2 class="section-title fade-in">📚 내가 만든 동화들</h2>
-    <a href="/collection" class="btn btn-yellow btn-sm fade-in">✨ 새 동화 만들기</a>
-  </div>
-
-  {% if stories %}
-  <div class="library-grid">
-    {% for story in stories %}
-    <div class="story-card fade-in" style="animation-delay: {{ loop.index0 * 0.08 }}s">
-
-      <!-- 삭제 버튼 -->
-      <button class="story-card-delete" data-story-id="{{ story.id }}" title="삭제">🗑</button>
-
-      <!-- 표지 이미지 -->
-      <div class="story-card-img">
-        {% if story.illustration_path %}
-          <img src="{{ url_for('static', filename=story.illustration_path.replace('static/', '')) }}"
-               alt="{{ story.title }}"
-               onerror="this.parentElement.innerHTML='📖'">
-        {% else %}
-          📖
-        {% endif %}
-      </div>
-
-      <!-- 동화 정보 -->
-      <div class="story-card-body">
-        <div class="story-card-title">{{ story.title }}</div>
-        <div class="story-card-keywords">
-          {% for kw in story.keywords %}
-          <span class="keyword-tag">{{ kw }}</span>
-          {% endfor %}
-        </div>
-        <div class="story-card-date">
-          {{ story.created_at[:10] if story.created_at else '' }}
-        </div>
-      </div>
-
-      <!-- 클릭 링크 (전체 카드) -->
-      <a href="/story/{{ story.id }}" class="story-card-link" aria-label="{{ story.title }} 읽기"></a>
-    </div>
-    {% endfor %}
-  </div>
-
-  {% else %}
-  <div class="empty-state fade-in">
-    <span class="empty-icon">📚</span>
-    <p>아직 만든 동화가 없어요!<br>그림을 그리고 동화를 만들어봐요.</p>
-    <a href="/draw" class="btn btn-yellow btn-big">🎨 그림 그리러 가기</a>
-  </div>
-  {% endif %}
-
-</div>
+<!-- Server Injected Data -->
+<script>
+  window.SERVER_DATA = {
+    stories: {{ stories | tojson | safe }}
+  };
+</script>
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/storybook.js') }}"></script>
+<!-- Custom Styles -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bookshelf.css') }}">
+
+<!-- ES Modules Import Map for React & Framer Motion -->
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "framer-motion": "https://esm.sh/framer-motion@11.0.3?deps=react@18.3.1,react-dom@18.3.1"
+  }
+}
+</script>
+
+<!-- Babel Standalone for in-browser JSX compilation -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<!-- Our React App (Compiled on the fly by Babel) -->
+<script type="text/babel" data-type="module" src="{{ url_for('static', filename='js/bookshelf.jsx') }}"></script>
 {% endblock %}
