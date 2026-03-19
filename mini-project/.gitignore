@@ -1,0 +1,35 @@
+# 환경변수 (API 키 포함 - 절대 올리지 않음)
+.env
+
+# 데이터베이스
+*.db
+*.sqlite
+
+# AI 생성 파일 (용량 큼)
+static/generated/
+static/audio/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log

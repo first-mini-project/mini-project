@@ -117,9 +117,6 @@ def generate_reference_image(korean_word: str, english_word: str, image_prompt: 
 
         payload = {
             "inputs": prompt,
-            "TargetContent": None,
-            "StartLine": None,
-            "EndLine": None,
         }
 
         response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
