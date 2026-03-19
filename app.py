@@ -126,7 +126,7 @@ def api_drawing_help():
     else:
         return jsonify({
             'success': False,
-            'error': 'AI 그림 생성을 위해 OPENAI_API_KEY가 필요해요'
+            'error': 'AI 그림 생성을 위해 HUGGINGFACE_API_KEY가 필요하거나 요청에 실패했어요'
         })
 
 

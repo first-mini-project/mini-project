@@ -8,6 +8,7 @@ class Config:
     DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'fairy_tale.db')
     ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+    HUGGINGFACE_API_KEY = os.getenv('HUGGINGFACE_API_KEY', '')
 
     BASE_DIR = os.path.dirname(__file__)
     DRAWINGS_DIR = os.path.join(BASE_DIR, 'static', 'generated', 'drawings')
