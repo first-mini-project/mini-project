@@ -1,0 +1,638 @@
+@import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
+
+/* Global Reset & Container */
+body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden; /* No scrollbars */
+  background: #ffffff;
+}
+
+.bookshelf-container.flat-vector-bg {
+  font-family: 'Jua', sans-serif;
+  display: flex;
+  flex-direction: row; /* Keep books side-by-side */
+  justify-content: center; /* Center horizontally */
+  align-items: center; /* Center vertically in the 100vh viewport */
+  gap: 50px; /* Space between the two shelves */
+  width: 100vw;
+  height: calc(100vh - 75px); /* Safely account for the top navigation bar! */
+  box-sizing: border-box;
+  overflow: hidden; 
+  position: relative; 
+}
+
+/* Toy Decorations Container */
+.decorations-layer {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; /* Let clicks pass through */
+  z-index: 1; /* Render behind interactive UI if overlapping */
+}
+
+/* Individual Toys forced to screen corners/margins */
+.toy {
+  position: absolute;
+  pointer-events: none !important; /* DO NOT BLOCK CLICKS */
+  filter: drop-shadow(0 8px 6px rgba(0,0,0,0.12));
+}
+.toy-bear {
+  top: 3vh;
+  left: 3vw;
+}
+.toy-ball {
+  top: 2vh;
+  left: 47vw;
+}
+.toy-rocket {
+  top: 3vh;
+  right: 3vw;
+  left: auto;
+}
+.toy-duck {
+  bottom: 3vh;
+  right: 5vw;
+  left: auto;
+}
+.toy-blocks {
+  bottom: 3vh;
+  left: 3vw;
+}
+
+/* Main Bookshelf Unit */
+.shelf-section {
+  width: 42vw; 
+  max-width: 480px;
+  height: 65vh; /* Reduced from 70vh to ensure space for the separate badge board underneath */
+  min-height: 450px;
+  max-height: 650px;
+  position: relative;
+  background-color: #e29e4a;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  border: 15px solid #bd762e;
+  border-bottom: none;
+  box-sizing: border-box;
+  margin-top: 100px; /* Highly increased space to completely prevent header clipping issues */
+}
+
+/* Slanted Sides */
+.shelf-section::before, .shelf-section::after {
+  content: '';
+  position: absolute;
+  top: -15px;
+  width: 25px;
+  height: calc(100% + 15px);
+  background-color: #bd762e;
+  border-radius: 12px 12px 0 0;
+  z-index: 10;
+}
+.shelf-section::before { left: -30px; }
+.shelf-section::after { right: -30px; }
+
+/* The Header Plaque (Signboard mounted ABOVE the top frame to prevent overlap) */
+.shelf-header {
+  position: absolute;
+  top: -65px; /* Completely above the shelf */
+  left: 0;
+  right: 0;
+  text-align: center;
+  z-index: 30;
+}
+
+/* Wooden pegs mounting the signboard to the shelf */
+.signboard-mount {
+  position: absolute;
+  width: 12px;
+  height: 25px;
+  background: #a66525;
+  top: 35px; /* connects the title plate to the top rail */
+  left: 20%;
+  border-radius: 4px;
+  box-shadow: inset -2px 0 0 rgba(0,0,0,0.1);
+  z-index: -1;
+}
+.signboard-mount.right {
+  left: auto;
+  right: 20%;
+}
+.shelf-title {
+  display: inline-block;
+  background: #fdfdfd;
+  color: #bd762e;
+  padding: 8px 30px;
+  border-radius: 20px;
+  border: 4px solid #bd762e;
+  font-size: 1.5rem;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.1);
+  margin: 0;
+}
+
+/* The Stepped Display (Books Grid) */
+.books-grid {
+  position: relative;
+  flex-grow: 1; /* Responsive height inside 70vh */
+  display: flex;
+  flex-direction: column;
+  background: #f0c07f;
+  border-bottom: 20px solid #d68b39; /* Base foot */
+}
+
+/* 3 Tier visual background tracking the exact CSS grid % */
+.tier {
+  position: absolute;
+  width: 100%;
+  height: calc(100% / 3); /* Responsive thirds */
+  box-sizing: border-box;
+  border-bottom: 15px solid #d68b39; /* The wooden ledge */
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,0.1);
+  z-index: 1;
+}
+.tier-1 { top: 0; }
+.tier-2 { top: calc(100% / 3); }
+.tier-3 { top: calc(200% / 3); border-bottom: none; }
+
+/* Responsive Grid for perfectly seated books */
+.books-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  grid-template-rows: repeat(3, 1fr); /* 3 precise grid rows to match the tier height */
+  align-items: end; /* Books drop to the baseline of their 1/3 cell */
+  justify-items: center;
+  gap: 0 6px; 
+  padding: 0 15px;
+  height: 100%; /* Fully map to the books-grid container */
+  width: 100%;
+  box-sizing: border-box;
+  position: absolute; top:0; left:0; z-index: 5;
+}
+
+/* Front-Facing Vector Book Cover */
+.book-cover {
+  position: relative;
+  border-radius: 4px;
+  cursor: pointer;
+  box-shadow: 2px 0px 4px rgba(0,0,0,0.2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  border: 1px solid rgba(0,0,0,0.05);
+  margin-bottom: 15px; /* Safely lifts the book exactly on top of the 15px solid wooden background ledge */
+  z-index: 5;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.book-cover:hover {
+  z-index: 50 !important; /* Pop over adjacent books! */
+}
+
+/* Dimensions optimized for 70-80% column height */
+.book-cover.landscape {
+  width: 130px;
+  height: 120px;
+}
+.book-cover.portrait {
+  width: 110px;
+  height: 150px;
+}
+
+/* Delete Button on Hover */
+.delete-book-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(255,255,255,0.9);
+  border: 2px solid #ddd;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  z-index: 20;
+  opacity: 0; /* Hidden until hover */
+  transition: opacity 0.2s, transform 0.1s, background-color 0.2s;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.05);
+}
+.book-cover:hover .delete-book-btn {
+  opacity: 1;
+}
+.delete-book-btn:hover {
+  background: #ff6b6b;
+  border-color: #e03131;
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 0 4px 0 #c92a2a;
+}
+.delete-book-btn:active {
+  transform: scale(1.0) translateY(2px);
+  box-shadow: none;
+}
+
+/* Magical Glowing and Wiggle animation for unread books */
+@keyframes magical-glow {
+  0% { box-shadow: 0 0 10px 2px rgba(255, 235, 130, 0.4), 2px 0px 4px rgba(0,0,0,0.2); }
+  50% { box-shadow: 0 0 30px 10px rgba(255, 255, 150, 0.9), 0 0 50px rgba(255, 215, 0, 1), 2px 0px 4px rgba(0,0,0,0.2); }
+  100% { box-shadow: 0 0 10px 2px rgba(255, 235, 130, 0.4), 2px 0px 4px rgba(0,0,0,0.2); }
+}
+
+@keyframes wiggle {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(-1deg); }
+  50% { transform: rotate(0deg); }
+  75% { transform: rotate(1deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.book-cover.unread-book {
+  animation: magical-glow 2s infinite alternate ease-in-out, wiggle 3.5s infinite ease-in-out;
+  border-color: rgba(255, 235, 100, 0.5); /* Emphasize border gently */
+}
+
+/* Beautiful Sweeping Shine Effect on unread covers */
+.book-cover.unread-book::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -150%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0) 100%);
+  transform: skewX(-25deg);
+  animation: shine-sweep 4s infinite ease-in-out;
+  pointer-events: none;
+  z-index: 20;
+}
+
+@keyframes shine-sweep {
+  0% { left: -150%; }
+  15% { left: 200%; }
+  100% { left: 200%; }
+}
+
+/* Vector Book Binding (Left side spine strip) */
+.book-binding {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 15px;
+  z-index: 2;
+  box-shadow: 2px 0 0 rgba(0,0,0,0.05);
+}
+
+/* Large playful vector shape strictly centered */
+.book-decoration {
+  position: absolute;
+  top: 40%;
+  left: 55%; /* Offset slightly because of binding */
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  text-shadow: 0 3px 0 rgba(0,0,0,0.05); /* Flat shadow on icon */
+}
+
+/* Flat Title Bar on Book */
+.book-cover-title {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  padding: 6px 15px 6px 20px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #555;
+  font-size: 11px;
+  text-align: center;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 -2px 0 rgba(0,0,0,0.04);
+}
+
+/* 🌟 Read Badge */
+.read-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 32px;
+  height: 32px;
+  background: #ffffff;
+  border-radius: 50%;
+  border: 3px solid #fec63a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.1);
+  z-index: 10;
+}
+
+.empty-shelf-text {
+  text-align: center;
+  color: #ffffff;
+  background: #bd762e;
+  padding: 10px 20px;
+  border-radius: 30px;
+  margin: auto;
+  font-size: 1.2rem;
+  z-index: 10;
+  grid-column: 1 / -1; /* Span entire shelf width in grid */
+}
+
+/* Storage Bins at the bottom (Exactly reproducing reference image) */
+.storage-section {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 25px;
+  background: #e29e4a;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  border-bottom: 25px solid #bd762e; /* The feet/base */
+}
+
+.storage-cubby {
+  flex: 1;
+  margin: 0 10px;
+  background: #c28336; /* Darker back inside the cubby */
+  height: 140px;
+  border-radius: 4px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  box-shadow: inset 0 8px 0 rgba(0,0,0,0.1);
+}
+
+/* The translucent plastic vector bin */
+.bin {
+  width: 90%;
+  height: 85%;
+  background: #dcd7d6; /* Light grey opaque plastic */
+  border-radius: 8px;
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.1);
+}
+
+/* Flat white handle on the bin */
+.bin-handle {
+  width: 40px;
+  height: 12px;
+  background: #ffffff;
+  border-radius: 8px;
+  margin-top: 10px;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.05);
+}
+
+/* Overlay & Modal overrides */
+.reader-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.reader-close-area {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 1;
+}
+
+.opened-book-container {
+  z-index: 2;
+  width: 90vw;
+  max-width: 960px;
+  height: 75vh;
+  perspective: 2000px;
+}
+
+.book-volume {
+  width: 100%; height: 100%; position: relative; transform-style: preserve-3d;
+}
+
+/* Modal Right Side Pages */
+.book-pages {
+  position: absolute; right: 0; width: 50%; height: 100%;
+  background: #ffffff;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 10px 10px 0 rgba(0,0,0,0.05);
+  padding: 3rem; overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column;
+}
+
+.book-cover-3d {
+  position: absolute; left: 50%; width: 50%; height: 100%;
+}
+
+.cover-front, .cover-inside {
+  position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+  border-radius: 0 10px 10px 0; overflow: hidden;
+}
+
+/* Giant Vector Book Cover */
+.cover-front.flat-vector {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border: 4px solid rgba(0,0,0,0.05);
+  box-shadow: 10px 10px 0 rgba(0,0,0,0.05);
+}
+.cover-front.flat-vector .book-binding { width: 30px; }
+.cover-front.flat-vector .flat-title {
+  margin-top: auto;
+  margin-bottom: 40px;
+  background: rgba(255,255,255,0.9);
+  padding: 10px 30px;
+  border-radius: 8px;
+  color: #444;
+}
+
+.cover-inside.flat-inside {
+  background: #ffffff;
+  transform: rotateY(180deg);
+  border-radius: 10px 0 0 10px;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  box-shadow: inset -10px 0 0 rgba(0,0,0,0.03);
+}
+
+.cover-inside.flat-inside h3 { font-size: 2.2rem; color: #5eb4d7; margin-bottom: 2rem; }
+.cover-inside.flat-inside p { color: #888; font-size: 1.2rem; }
+
+/* Story Typography Flat */
+.story-title { font-size: 2rem; text-align: center; margin-bottom: 1rem; border-bottom: 4px solid #f0f0f0; padding-bottom: 1rem; }
+.story-page-content { flex-grow: 1; display: flex; align-items: center; justify-content: center; }
+.story-text { font-size: 1.3rem; line-height: 1.8; color: #555; white-space: pre-wrap; text-align: left; }
+
+/* Paging Controls Flat */
+.paging-controls {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-top: 1.5rem; border-top: 4px solid #f0f0f0; margin-top: 2rem;
+}
+
+.page-btn {
+  background: #fdfdfd; color: #5eb4d7; border: 4px solid #5eb4d7;
+  padding: 8px 24px; border-radius: 20px; font-weight: bold; cursor: pointer; font-family: inherit; font-size: 1.1rem;
+  box-shadow: 0 4px 0 #3b8aaa; transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.page-btn:not(.disabled):hover { transform: translateY(2px); box-shadow: 0 2px 0 #3b8aaa; }
+.page-btn:not(.disabled):active { transform: translateY(4px); box-shadow: none; }
+.page-btn.disabled { border-color: #e0e0e0; color: #aaa; box-shadow: 0 4px 0 #ccc; cursor: not-allowed; }
+
+.page-indicator { font-size: 1.2rem; color: #999; font-weight: bold; }
+
+/* Close Button Flat */
+.close-button {
+  position: absolute; top: 1.5rem; right: 1.5rem;
+  background: #fdfdfd; color: #ff6b6b; border: 4px solid #ff6b6b;
+  width: 40px; height: 40px; border-radius: 50%; font-size: 1.5rem; font-weight: bold;
+  cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 0 #c92a2a; transition: transform 0.1s, box-shadow 0.1s;
+}
+.close-button:hover { transform: translateY(2px); box-shadow: 0 2px 0 #c92a2a; }
+.close-button:active { transform: translateY(4px); box-shadow: none; }
+
+/* Standalone Badge Showcase Board (Separate from Shelf background) */
+.badge-showcase-board {
+  position: relative;
+  margin-top: 15px; /* Natural spacing below the shelf */
+  width: max-content;
+  min-width: 90%;
+  max-width: 100%;
+  background: #fdfaf0; /* Ivory / Cream background */
+  border: 4px solid #e1d3b4; /* Soft beige border */
+  border-radius: 12px;
+  padding: 10px 20px;
+  box-shadow: 0 5px 0 #cab998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+}
+.badge-collection {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center; /* Exactly aligned string of badges */
+  gap: 6px;
+}
+.reward-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #fff;
+  border-radius: 50%;
+  font-size: 18px;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.1);
+  border: 2px solid #5eb4d7;
+  cursor: help;
+}
+
+/* Recommendations */
+.empty-recommendations {
+  grid-column: 1 / -1; /* Span across books-container grid horizontally */
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  z-index: 10;
+  padding-bottom: 30px;
+}
+.keyword-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.keyword-tag {
+  background: #fdfdfd;
+  color: #ea4435;
+  text-decoration: none;
+  padding: 8px 18px;
+  border-radius: 25px;
+  font-weight: bold;
+  font-size: 1.1rem;
+  border: 4px solid #ea4435;
+  box-shadow: 0 4px 0 #bd3428;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.keyword-tag:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #bd3428;
+}
+.keyword-tag:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #bd3428;
+}
+
+/* ---------------------- ARCHIVE & TREASURE BOX ---------------------- */
+.archive-treasure-box {
+  position: absolute;
+  bottom: 0px; 
+  right: -90px; /* Position intimately near the bottom right of the read shelf */
+  background: #fdfdfd;
+  border: 4px solid #8cc541;
+  border-radius: 15px;
+  padding: 10px 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  z-index: 50;
+  box-shadow: 0 5px 0 #68992a;
+  transition: box-shadow 0.1s, transform 0.1s;
+}
+.archive-treasure-box:active {
+  box-shadow: none;
+}
+.archive-icon { font-size: 2.5rem; text-shadow: 0 3px 0 rgba(0,0,0,0.1); }
+.archive-label { font-size: 0.95rem; font-weight: bold; color: #555; margin-top: 5px; }
+.archive-count {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: #ea4435;
+  color: #fff;
+  border-radius: 50%;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: bold; border: 3px solid #fff;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.1);
+}
+
+.archive-modal-content {
+  background: #f0c07f;
+  border: 15px solid #bd762e;
+  border-radius: 20px;
+  padding: 30px;
+  width: 90vw;
+  max-width: 900px;
+  height: 80vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
+}
+.archive-title { text-align: center; color: #fff; text-shadow: 0 3px 0 rgba(0,0,0,0.15); font-size: 2.2rem; margin-top: 0; margin-bottom: 5px; }
+.archive-subtitle { text-align: center; color: #bd762e; font-weight: bold; margin-bottom: 25px; }
+.archive-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); 
+  gap: 30px 10px; 
+  justify-items: center; 
+  padding: 20px; 
+  background: rgba(255,255,255,0.4); 
+  border-radius: 12px; 
+  flex-grow: 1;
+  overflow-y: auto;
+  border: 3px dashed #d68b39;
+}
