@@ -9,7 +9,7 @@ class Config:
     ANTHROPIC_API_KEY    = os.getenv('ANTHROPIC_API_KEY', '')
     OPENAI_API_KEY       = os.getenv('OPENAI_API_KEY', '')
     GEMINI_API_KEY       = os.getenv('GEMINI_API_KEY', '')
-    HUGGINGFACE_TOKEN    = os.getenv('HUGGINGFACE_TOKEN', '')
+    HUGGINGFACE_API_KEY  = os.getenv('HUGGINGFACE_API_KEY', '')
 
     BASE_DIR          = os.path.dirname(__file__)
     DRAWINGS_DIR      = os.path.join(BASE_DIR, 'static', 'generated', 'drawings')

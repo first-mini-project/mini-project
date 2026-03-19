@@ -9,6 +9,10 @@
     <h2 class="section-title">🖼️ 내가 그린 그림들</h2>
     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
       <span class="selection-counter" id="selection-counter">0 / 5 개 선택</span>
+      {% if drawings %}
+      <button class="btn btn-pink btn-sm" id="btn-float">🌊 둥실둥실</button>
+      <button class="btn btn-yellow btn-sm" id="btn-grid">📋 도감 보기</button>
+      {% endif %}
       <a href="/draw" class="btn btn-yellow btn-sm">🎨 그림 더 그리기</a>
     </div>
   </div>
@@ -20,20 +24,20 @@
   {% if drawings %}
   <div class="drawings-grid">
     {% for drawing in drawings %}
-    <div class="drawing-card fade-in" data-id="{{ drawing.id }}"
-         style="animation-delay: {{ loop.index0 * 0.05 }}s">
+    <div class="drawing-card fade-in" data-id="{{ drawing.id }}" style="animation-delay: {{ loop.index0 * 0.05 }}">
       <div class="selected-badge">✓</div>
       {% if drawing.file_path %}
-        <img src="{{ url_for('static', filename=drawing.file_path.replace('static/', '')) }}"
-             alt="{{ drawing.korean }}"
-             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
-        <div style="display:none; width:100%; height:140px; align-items:center; justify-content:center; font-size:4rem; background:#f9f9f9; border-radius:10px;">
-          {{ drawing.emoji }}
-        </div>
+      <img src="{{ url_for('static', filename=drawing.file_path.replace('static/', '')) }}" alt="{{ drawing.korean }}"
+        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+      <div
+        style="display:none; width:100%; height:140px; align-items:center; justify-content:center; font-size:4rem; background:#f9f9f9; border-radius:10px;">
+        {{ drawing.emoji }}
+      </div>
       {% else %}
-        <div style="width:100%; height:140px; display:flex; align-items:center; justify-content:center; font-size:4rem; background:#f9f9f9; border-radius:10px;">
-          {{ drawing.emoji }}
-        </div>
+      <div
+        style="width:100%; height:140px; display:flex; align-items:center; justify-content:center; font-size:4rem; background:#f9f9f9; border-radius:10px;">
+        {{ drawing.emoji }}
+      </div>
       {% endif %}
       <div class="drawing-card-word">
         <span class="drawing-card-emoji">{{ drawing.emoji }}</span> {{ drawing.korean }}
