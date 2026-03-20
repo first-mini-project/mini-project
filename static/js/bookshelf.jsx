@@ -81,11 +81,9 @@ function BookCover({ book, idx, onClick, onDelete }) {
 }
 
 // Sub-component: Bookshelf Section matching reference
-function Shelf({ title, books, onBookClick, onDelete, renderEmpty, showBadges }) {
-  const earnedBadges = books.map((_, i) => BADGE_LIST[i % BADGE_LIST.length]);
-
+function Shelf({ title, books, onBookClick, onDelete, renderEmpty }) {
   return (
-    <div className="shelf-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
+    <div className="shelf-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       <div className="shelf-section">
         <div className="shelf-sides"></div> {/* The sloping sides */}
         
@@ -118,26 +116,6 @@ function Shelf({ title, books, onBookClick, onDelete, renderEmpty, showBadges })
           <div className="storage-cubby"><div className="bin"><div className="bin-handle"></div></div></div>
         </div>
       </div>
-
-      {showBadges && earnedBadges.length > 0 && (
-        <div className="badge-showcase-board">
-          <h4 style={{ margin: '0 15px 0 0', color: '#555', fontSize: '1.2rem', textShadow: 'none', whiteSpace: 'nowrap' }}>🎖️ 나의 뱃지</h4>
-          <div className="badge-collection">
-            {earnedBadges.map((badge, i) => (
-              <motion.span 
-                key={i} 
-                className="reward-badge"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", delay: i * 0.1 }}
-                title={`${i+1}번째 다 읽은 책 보상!`}
-              >
-                {badge}
-              </motion.span>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -236,6 +214,14 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
     return nukkiMap[d.id] || (d.file_path ? '/' + d.file_path.replace(/^\/+/, '') : null);
   }
 
+  function bgImgTag(scene) {
+    if (scene && (scene.merged_image || scene.mergedMoralImage)) {
+      const src = scene.merged_image || scene.mergedMoralImage;
+      return `<img src="/${src.replace(/^\/+/, '')}" style="width:100%; height:100%; object-fit:cover; display:block;" alt="배경">`;
+    }
+    return '';
+  }
+
   function renderDrawing(d, style) {
     const src = getDrawingSrc(d);
     if (!src) return null;
@@ -252,7 +238,7 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   function renderLeftPage() {
     const bgImage = currentPage.bgImage;
     const bgText  = currentPage.bgText || '';
-    const mergedImage = currentPage.mergedImage;
+    const mergedImage = currentPage.mergedImage || currentPage.mergedMoralImage;
 
     // storybook.js 와 동일: 서버 저장 파일 우선 → Pollinations.ai 폴백
     let bgSrc = null;
@@ -260,7 +246,7 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
         bgSrc = '/' + mergedImage.replace(new RegExp('^/+'), '');
     } else if (bgImage) {
         bgSrc = '/' + bgImage.replace(new RegExp('^/+'), '');
-    } else if (bgText) {
+    } else if (currentPage.type !== 'moral' && bgText) {
       const prompt = bgText
         + ', children storybook illustration, watercolor art style, soft pastel colors,'
         + ' magical whimsical background scenery, no characters, no people, no animals, no text';
@@ -272,7 +258,7 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
       <div style={{
         position: 'relative', width: '100%', height: '100%',
         overflow: 'hidden', borderRadius: '10px 0 0 10px',
-        transform: 'scaleX(-1)'
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
       }}>
         {/* 배경 — 로딩 중 스피너 표시 */}
         {bgSrc ? (
@@ -503,6 +489,14 @@ function BookshelfApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [recommendedWords, setRecommendedWords] = useState([]);
 
+  // 레벨 정보 계산
+  function getLevelInfo(totalRead) {
+    if (totalRead >= 31) return { label: '👑 전설 작가', next: null, nextAt: null, color: '#f4c430' };
+    if (totalRead >= 21) return { label: '✨ 마법 작가', next: '👑 전설 작가', nextAt: 31, color: '#9b59b6' };
+    if (totalRead >= 11) return { label: '🌳 꿈나무 작가', next: '✨ 마법 작가', nextAt: 21, color: '#27ae60' };
+    return { label: '🌱 새싹 작가', next: '🌳 꿈나무 작가', nextAt: 11, color: '#e67e22' };
+  }
+
   useEffect(() => {
     // Load ACTUAL data from server if available (injected via window object in Jinja)
     if (window.SERVER_DATA && window.SERVER_DATA.stories) {
@@ -512,8 +506,32 @@ function BookshelfApp() {
           parsedScenes = (typeof s.scene_data === 'string') ? JSON.parse(s.scene_data) : (s.scene_data || []);
         } catch(e) {}
 
+        let parsedLayout = null;
+        try {
+          parsedLayout = (typeof s.layout_data === 'string') ? JSON.parse(s.layout_data) : (s.layout_data || null);
+        } catch(e) {}
+
         const mappedPages = [];
-        if (parsedScenes && parsedScenes.length > 0) {
+        if (parsedLayout && parsedLayout.spreads) {
+          parsedLayout.spreads.forEach((spread) => {
+            if (spread.type === 'content') {
+              const scene = parsedScenes[spread.sceneIdx];
+              mappedPages.push({
+                type: 'content',
+                content_kr: scene ? scene.text : '',
+                bgImage: scene ? scene.bg_image : null,
+                bgText: (scene && scene.bg) || '',
+                mergedImage: spread.mergedImage
+              });
+            } else if (spread.type === 'moral') {
+              mappedPages.push({
+                type: 'moral',
+                content_kr: `💡 교훈:\n${s.moral}`,
+                mergedMoralImage: spread.mergedMoralImage
+              });
+            }
+          });
+        } else if (parsedScenes && parsedScenes.length > 0) {
           parsedScenes.forEach((scene, i) => {
             mappedPages.push({ 
                 page: i + 1, 
@@ -619,26 +637,30 @@ function BookshelfApp() {
   const readBooksOnShelf = allReadBooks.slice(0, 9);   // 최신 9권 → 내가 읽은 책 선반
   const archivedBooks    = allReadBooks.slice(9);       // 오래된 것들 → 책 꾸러미
 
+  const user = window.SERVER_DATA.user || { total_books: 0, badge: '🌱 새싹 작가' };
+
+
   return (
     <div className="bookshelf-container flat-vector-bg">
       <ToyDecorations />
       
-      <Shelf 
-        title="새로 나온 책들 ✨" 
-        books={unreadBooks} 
-        onBookClick={setActiveBook} 
-        onDelete={deleteBook} 
-        renderEmpty={renderEmptyUnread} 
-      />
+      <div style={{ position: 'relative' }}>
+        <Shelf 
+          title="새로 나온 책들 ✨" 
+          books={unreadBooks} 
+          onBookClick={setActiveBook} 
+          onDelete={deleteBook} 
+          renderEmpty={renderEmptyUnread} 
+        />
+      </div>
       
-      <div style={{ position: 'relative', height: '100%' }}>
+       <div style={{ position: 'relative' }}>
         <Shelf 
           title="내가 읽은 책들 🌟" 
           books={readBooksOnShelf} 
           onBookClick={setActiveBook} 
           onDelete={deleteBook} 
           renderEmpty={renderEmptyRead} 
-          showBadges={true} 
         />
         
         {/* Archive / Treasure Box Button */}
@@ -658,6 +680,42 @@ function BookshelfApp() {
           </div>
         )}
       </div>
+
+      {/* 새싹 작가 레벨 카드 (절대 배치되어 책장 정렬에 영향을 주지 않음) */}
+      {(() => {
+        const totalRead = allReadBooks.length;
+        const info = getLevelInfo(totalRead);
+        const prevAt = totalRead >= 31 ? 31 : totalRead >= 21 ? 21 : totalRead >= 11 ? 11 : 0;
+        const nextAt = info.nextAt || (prevAt + 10);
+        const progress = info.next
+          ? Math.min(100, Math.round(((totalRead - prevAt) / (nextAt - prevAt)) * 100))
+          : 100;
+        return (
+          <motion.div
+            className="level-card absolute-pos"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, type: "spring", stiffness: 200, damping: 20 }}
+          >
+            <div className="level-card-badge" style={{ background: info.color }}>
+              {info.label.split(' ')[0]}
+            </div>
+            <div className="level-card-info">
+              <div className="level-card-title">{info.label}</div>
+              <div className="level-card-sub">읽은 책 <strong>{totalRead}</strong>권</div>
+              {info.next && (
+                <div className="level-progress-wrap">
+                  <div className="level-progress-bar">
+                    <div className="level-progress-fill" style={{ width: `${progress}%`, background: info.color }} />
+                  </div>
+                  <span className="level-progress-label">{info.next}까지 {nextAt - totalRead}권 남음</span>
+                </div>
+              )}
+              {!info.next && <div className="level-card-sub" style={{color: info.color}}>최고 레벨 달성! 🎉</div>}
+            </div>
+          </motion.div>
+        );
+      })()}
 
       <AnimatePresence>
         {activeBook && (

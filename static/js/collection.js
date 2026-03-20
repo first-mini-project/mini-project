@@ -362,7 +362,16 @@
         });
         const data = await res.json();
         clearInterval(msgInterval);
-        if (data.success) { window.location.href = `/story/${data.story_id}`; }
+        if (data.success) { 
+          if (data.level_up_info) {
+            showLevelUpModal(data.level_up_info);
+            setTimeout(() => {
+              window.location.href = `/story/${data.story_id}`;
+            }, 4000);
+          } else {
+            window.location.href = `/story/${data.story_id}`;
+          }
+        }
         else { loading.classList.remove('show'); makeBtn.disabled = false; alert('오류: ' + data.error); }
       } catch {
         clearInterval(msgInterval);
@@ -378,6 +387,19 @@
     toast.textContent = msg;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2500);
+  }
+
+  function showLevelUpModal(info) {
+    if (!info) return;
+    const modal = document.getElementById('level-up-modal');
+    if (!modal) return;
+    const badgeEl = document.getElementById('level-up-badge');
+    if (badgeEl) badgeEl.textContent = info.badge.split(' ')[0];
+    const titleEl = document.getElementById('level-up-title');
+    if (titleEl) titleEl.textContent = info.badge;
+    const unlockEl = document.getElementById('level-up-unlocked');
+    if (unlockEl) unlockEl.textContent = info.unlocked;
+    modal.classList.add('show');
   }
 
   updateUI();

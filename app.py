@@ -97,6 +97,13 @@ def library():
     """내 동화 도서관"""
     stories = db.get_all_stories()
     # 각 스토리의 그림 데이터도 함께 주입 (도서관 뷰어에서 누끼 그림 표시용)
+    # 뱃지 시스템용 데이터 추가
+    total_books = db.get_story_count()
+    badge = "🌱 새싹 작가"
+    if total_books >= 31: badge = "👑 전설 작가"
+    elif total_books >= 21: badge = "✨ 마법 작가"
+    elif total_books >= 11: badge = "🌳 꿈나무 작가"
+
     for story in stories:
         try:
             drawing_ids = story.get('drawing_ids', [])
@@ -109,7 +116,8 @@ def library():
             ]
         except Exception:
             story['drawings'] = []
-    return render_template('library.html', stories=stories)
+    
+    return render_template('library.html', stories=stories, total_books=total_books, badge=badge)
 
 
 @app.route('/story/<int:story_id>')
@@ -175,7 +183,6 @@ def api_drawing_help():
     data = request.get_json()
     korean = data.get('korean', '')
     english = data.get('english', '')
-
     # Claude로 최적화된 이미지 프롬프트 생성
     image_prompt = ai_service.generate_image_prompt(korean, english)
 
@@ -187,7 +194,7 @@ def api_drawing_help():
     else:
         return jsonify({
             'success': False,
-            'error': 'AI 그림 생성을 위해 HUGGINGFACE_API_KEY가 필요하거나 요청에 실패했어요'
+            'error': '오류가 발생했습니다 (모델 로딩 중이거나 첫 실행이라 준비 중일 수 있습니다)'
         })
 
 
@@ -240,7 +247,10 @@ def api_generate_story():
         full_text = f"{story_data['title']}. {story_data['content']} {story_data.get('moral', '')}"
         audio_path = tts_service.generate_tts(full_text, slow=False)
 
-        # 5. layout_data 생성 (정확한 스프레드 배치 저장)
+        # 5. 교훈 페이지 콜라주 생성
+        merged_moral_path = image_service.generate_moral_collage(story_data.get('moral', ''), drawings)
+
+        # 6. layout_data 생성 (정확한 스프레드 배치 저장)
         scenes = story_data.get('scene_data', [])
         num_content = len(scenes) if scenes else len(drawings)
         
@@ -265,7 +275,6 @@ def api_generate_story():
             return keyword in t
 
         def find_mentioned_drawings(scene_text, all_drawings):
-            """장면 텍스트에 언급된 그림들을 반환"""
             text = scene_text or ''
             result = []
             for d in all_drawings:
@@ -277,13 +286,12 @@ def api_generate_story():
         
         # 표지
         cover_drawing_id = drawings[0]['id'] if drawings else None
-        # 첫 번째 장면의 병합 이미지를 표지 배경으로 쓸 수도 있음 혹은 그냥 없이
         cover_merged_image = scenes[0].get('merged_image') if scenes else None
 
         layout_spreads.append({
             'type': 'cover',
             'drawingId': cover_drawing_id,
-            'mergedImage': cover_merged_image, # 표지도 병합 이미지 사용 가능하게
+            'mergedImage': cover_merged_image,
             'sceneIdx': 0
         })
         
@@ -309,7 +317,6 @@ def api_generate_story():
             })
         
         # 미배치 그림 후처리: 텍스트에 언급 안 된 그림을 빈 슬롯에 채움
-        # (표지 그림은 제외 — 표지에만 나오고 내용 페이지에 안 나오는 그림 방지)
         assigned_ids = set()
         for sp in layout_spreads:
             if sp.get('primaryDrawingId'):
@@ -332,8 +339,11 @@ def api_generate_story():
                     sp['secondaryDrawingId'] = d['id']
                     break
 
-        # 교훈 페이지
-        layout_spreads.append({'type': 'moral'})
+        # 교훈 페이지 (콜라주 이미지 포함)
+        layout_spreads.append({
+            'type': 'moral',
+            'mergedMoralImage': merged_moral_path
+        })
 
         # 종료 페이지
         layout_spreads.append({'type': 'end'})
@@ -353,7 +363,22 @@ def api_generate_story():
             layout_data=layout_data
         )
 
-        return jsonify({'success': True, 'story_id': story_id})
+        # 7. 레벨업 확인
+        new_count = db.get_story_count()
+        level_up_info = None
+        if new_count in [1, 11, 21, 31]:
+            badges = {
+                1:  ("🌱 새싹 작가", "기본 도구들을 사용할 수 있어요!"),
+                11: ("🌳 꿈나무 작가", "무지개 펜(Rainbow Pen) 🌈 이 열렸어요!"),
+                21: ("✨ 마법 작가", "반짝이 브러시(Sparkle Brush) ✨ 가 열렸어요!"),
+                31: ("👑 전설 작가", "황금 스탬프(Golden Stamp) 👑 가 열렸어요!")
+            }
+            level_up_info = {
+                'badge': badges[new_count][0],
+                'unlocked': badges[new_count][1]
+            }
+
+        return jsonify({'success': True, 'story_id': story_id, 'level_up': level_up_info})
 
     except Exception as e:
         print(f"[동화 생성 오류] {e}")
@@ -390,6 +415,21 @@ def api_drawings():
     drawings = db.get_all_drawings()
     return jsonify(drawings)
 
+@app.route('/api/user/stats')
+def api_user_stats():
+    """사용자의 전체 책 개수와 현재 뱃지 정보를 반환합니다."""
+    count = db.get_story_count()
+    
+    badge = "🌱 새싹 작가"
+    if count >= 31: badge = "👑 전설 작가"
+    elif count >= 21: badge = "✨ 마법 작가"
+    elif count >= 11: badge = "🌳 꿈나무 작가"
+    
+    return jsonify({
+        'total_books': count,
+        'badge': badge
+    })
+
 
 @app.route('/api/drawings/<int:drawing_id>', methods=['DELETE'])
 def api_delete_drawing(drawing_id):
@@ -413,4 +453,4 @@ if __name__ == '__main__':
     print(f"OpenAI API:    {'SET ✓' if Config.OPENAI_API_KEY    else 'NOT SET - no image gen'}")
     print("URL: http://localhost:5000")
     print("=" * 50)
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    app.run(debug=True, use_reloader=False, port=5000, host='0.0.0.0')

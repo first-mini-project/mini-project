@@ -14,13 +14,21 @@ body {
   display: flex;
   flex-direction: row; /* Keep books side-by-side */
   justify-content: center; /* Center horizontally */
-  align-items: center; /* Center vertically in the 100vh viewport */
-  gap: 50px; /* Space between the two shelves */
+  align-items: center; /* Center vertically */
+  gap: 70px; /* Space between the two shelves */
   width: 100vw;
   height: calc(100vh - 75px); /* Safely account for the top navigation bar! */
   box-sizing: border-box;
   overflow: hidden; 
   position: relative; 
+  padding-top: 40px; 
+  padding-bottom: 150px; /* Increased padding to clear the bottom fixed card */
+}
+
+/* Added wrapper padding to allow space for absolutely positioned headers in Flex centering */
+.shelf-wrapper {
+  padding: 70px 0; 
+  position: relative;
 }
 
 /* Toy Decorations Container */
@@ -64,18 +72,19 @@ body {
 .shelf-section {
   width: 42vw; 
   max-width: 480px;
-  height: 65vh; /* Reduced from 70vh to ensure space for the separate badge board underneath */
-  min-height: 450px;
-  max-height: 650px;
+  height: 55vh; /* Further reduced height to ensure zero overlap with the level card below */
+  min-height: 400px;
+  max-height: 550px;
   position: relative;
   background-color: #e29e4a;
   border-radius: 10px 10px 0 0;
   display: flex;
   flex-direction: column;
-  border: 15px solid #bd762e;
-  border-bottom: none;
+  border: 10px solid #e29e4a;
+  box-shadow: 
+    inset 0 0 15px rgba(0,0,0,0.1),
+    0 10px 0 #bd762e;
   box-sizing: border-box;
-  margin-top: 100px; /* Highly increased space to completely prevent header clipping issues */
 }
 
 /* Slanted Sides */
@@ -99,7 +108,7 @@ body {
   left: 0;
   right: 0;
   text-align: center;
-  z-index: 30;
+  z-index: 100; /* Pop significantly above everything */
 }
 
 /* Wooden pegs mounting the signboard to the shelf */
@@ -121,11 +130,12 @@ body {
 .shelf-title {
   display: inline-block;
   background: #fdfdfd;
-  color: #bd762e;
+  color: #bd762e !important; /* Force the brown color */
   padding: 8px 30px;
   border-radius: 20px;
   border: 4px solid #bd762e;
   font-size: 1.5rem;
+  font-weight: bold; /* Make it more legible */
   box-shadow: 0 4px 0 rgba(0,0,0,0.1);
   margin: 0;
 }
@@ -309,6 +319,52 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   box-shadow: 0 -2px 0 rgba(0,0,0,0.04);
+}
+
+/* FIXED Pill Card at the bottom center */
+.level-card.absolute-pos {
+  position: fixed; /* Changed to fixed to ensure it stays outside the flex flow */
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%) !important;
+  width: 90%;
+  max-width: 460px;
+  min-height: 80px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  border: 5px solid #fec63a;
+  border-radius: 60px;
+  z-index: 9999; /* Higher z-index */
+  padding: 12px 30px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  margin: 0;
+}
+
+.level-card.absolute-pos .level-card-badge {
+  width: 40px;
+  height: 40px;
+  font-size: 1.5rem;
+}
+
+.level-card.absolute-pos .level-card-info {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 15px;
+}
+
+.level-card.absolute-pos .level-progress-wrap {
+  width: 150px;
+  margin-top: 0;
+}
+
+.level-card.absolute-pos .level-card-title {
+  font-size: 1.1rem;
 }
 
 /* 🌟 Read Badge */
@@ -498,42 +554,83 @@ body {
 .close-button:hover { transform: translateY(2px); box-shadow: 0 2px 0 #c92a2a; }
 .close-button:active { transform: translateY(4px); box-shadow: none; }
 
-/* Standalone Badge Showcase Board (Separate from Shelf background) */
-.badge-showcase-board {
+/* ---------------------- LEVEL GROWTH CARD ---------------------- */
+.level-card {
   position: relative;
-  margin-top: 15px; /* Natural spacing below the shelf */
-  width: max-content;
-  min-width: 90%;
-  max-width: 100%;
-  background: #fdfaf0; /* Ivory / Cream background */
-  border: 4px solid #e1d3b4; /* Soft beige border */
-  border-radius: 12px;
-  padding: 10px 20px;
-  box-shadow: 0 5px 0 #cab998;
+  margin-top: 15px;
+  width: 90%;
+  max-width: 400px;
+  background: #ffffff;
+  border: 4px solid #fec63a;
+  border-radius: 20px;
+  padding: 15px 20px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 15px;
+  box-shadow: 0 6px 0 rgba(0,0,0,0.1);
   z-index: 25;
+  box-sizing: border-box;
 }
-.badge-collection {
+
+.level-card-badge {
+  flex-shrink: 0;
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center; /* Exactly aligned string of badges */
-  gap: 6px;
-}
-.reward-badge {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: #fff;
-  border-radius: 50%;
-  font-size: 18px;
-  box-shadow: 0 3px 0 rgba(0,0,0,0.1);
-  border: 2px solid #5eb4d7;
-  cursor: help;
+  font-size: 2.2rem;
+  color: #fff;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.15);
+  border: 3px solid #fff;
+}
+
+.level-card-info {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.level-card-title {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #555;
+  line-height: 1.2;
+}
+
+.level-card-sub {
+  font-size: 0.95rem;
+  color: #888;
+  margin-top: 2px;
+}
+
+.level-progress-wrap {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.level-progress-bar {
+  width: 100%;
+  height: 10px;
+  background: #f0f0f0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: inset 0 2px 2px rgba(0,0,0,0.05);
+}
+
+.level-progress-fill {
+  height: 100%;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.level-progress-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: #999;
+  font-weight: bold;
+  text-align: right;
 }
 
 /* Recommendations */
@@ -574,7 +671,52 @@ body {
   box-shadow: 0 1px 0 #bd3428;
 }
 
-/* ---------------------- ARCHIVE & TREASURE BOX ---------------------- */
+/* ---------------------- USER BADGE HEADER ---------------------- */
+.user-badge-header {
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  pointer-events: auto;
+}
+.user-badge-card {
+  background: #ffffff;
+  border: 4px solid #fec63a;
+  border-radius: 50px;
+  padding: 8px 30px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 6px 0 rgba(0,0,0,0.1);
+  min-width: 320px;
+}
+.user-badge-icon {
+  font-size: 2.5rem;
+  background: #fff;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.05);
+}
+.user-badge-info {
+  display: flex;
+  flex-direction: column;
+}
+.user-badge-title {
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #bd762e;
+  line-height: 1.2;
+}
+.user-badge-count {
+  font-size: 0.9rem;
+  color: #888;
+  margin-top: 2px;
+}
 .archive-treasure-box-container {
   position: absolute;
   top: 0;

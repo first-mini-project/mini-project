@@ -41,23 +41,8 @@ def flatten_scene_images(scene_data, all_drawings):
     if not scene_data or not all_drawings:
         return scene_data
 
-    print(f"[Flattening] {len(scene_data)}개 장면 병합 시작...")
-
     for idx, scene in enumerate(scene_data):
         bg_path = scene.get('bg_image')
-        # 배경이 없더라도 사용자 그림을 넣기 위함 (기본 배경 또는 폴백 배경 사용 유도)
-        if not bg_path:
-            # 배경 생성 실패 시에도 빈 배경이라도 만들어 합침
-            pass 
-
-        # 장면 텍스트와 매칭되는 그림 찾기
-        text = scene.get('text', '')
-        matched = [d for d in all_drawings if d.get('korean') and d['korean'] in text]
-        
-        # 언급된 그림이 없으면 순환 배치
-        if not matched:
-            matched = [all_drawings[idx % len(all_drawings)]]
-
         try:
             # 배경 로딩 (없으면 하늘색/연두색 그라데이션 빈 배경 생성)
             bg_full_path = os.path.join(Config.BASE_DIR, bg_path.replace('/', os.sep)) if bg_path else None
@@ -67,12 +52,19 @@ def flatten_scene_images(scene_data, all_drawings):
                 # 배경 파일 누락 시 폴백 배경 생성
                 bg_img = Image.new('RGBA', (512, 512), (135, 206, 235, 255)) # Sky Blue
             
+            # 비율에 맞춰 리사이즈
+            bg_img = bg_img.resize((512, 768), Image.LANCZOS)
             bg_w, bg_h = bg_img.size
+
+            # 장면 텍스트와 매칭되는 그림 찾기
+            text = scene.get('text', '')
+            matched = [d for d in all_drawings if d.get('korean') and d['korean'] in text]
+            if not matched:
+                matched = [all_drawings[idx % len(all_drawings)]]
 
             # 최대 2개 그림 배치
             drawings_to_add = matched[:2]
-            added_count = 0
-
+            
             for i, d in enumerate(drawings_to_add):
                 d_path = d.get('file_path')
                 if not d_path: continue
@@ -82,42 +74,126 @@ def flatten_scene_images(scene_data, all_drawings):
                 d_img = Image.open(d_full_path)
                 d_img = make_nukki(d_img)
                 
-                # 크기 조정 (배경의 60% 내외)
-                max_dim = int(min(bg_w, bg_h) * 0.6)
-                d_img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+                # 그림 리사이즈 (배경 대비 적절한 크기)
+                max_draw_size = 200
+                d_img.thumbnail((max_draw_size, max_draw_size), Image.LANCZOS)
                 dw, dh = d_img.size
 
+                # 하늘 키워드면 상단, 아니면 하단 배치
                 sky = is_sky(d.get('korean', ''))
-                px, py = 0, 0
-
-                if len(drawings_to_add) == 1:
+                if sky:
                     px = (bg_w - dw) // 2
-                    py = int(bg_h * 0.08) if sky else int(bg_h * 0.95 - dh)
-                else: # 2개
-                    if i == 0: # primary
-                        px = int(bg_w * 0.15)
-                        py = int(bg_h * 0.95 - dh) if not sky else int(bg_h * 0.08)
-                    else: # secondary
-                        px = int(bg_w * 0.85 - dw)
-                        py = int(bg_h * 0.95 - dh) if not sky else int(bg_h * 0.08)
+                    py = 40
+                else:
+                    px = (bg_w - dw) // 2
+                    py = bg_h - dh - 40
+
+                # 2개인 경우 약간 오프셋 (겹침 방지)
+                if len(drawings_to_add) == 2:
+                    if i == 0:
+                        px = max(0, px - 40)
+                    else:
+                        px = min(bg_w - dw, px + 40)
+
+                # 좌표가 유효한 범위인지 확인
+                px = max(0, min(px, bg_w - dw))
+                py = max(0, min(py, bg_h - dh))
 
                 bg_img.alpha_composite(d_img, (px, py))
-                added_count += 1
 
-            # 최종 저장 (단일 이미지)
+            # 최종 저장
             merged_filename = f"scene_{idx}_{uuid.uuid4().hex[:8]}.jpg"
             merged_filepath = os.path.join(Config.MERGED_DIR, merged_filename)
             bg_img.convert("RGB").save(merged_filepath, "JPEG", quality=90)
             
             scene['merged_image'] = f"static/generated/merged/{merged_filename}"
-            print(f"[Flattening] 장면 {idx} 병합 완료: {merged_filename}")
 
         except Exception as e:
             print(f"[Flattening Error] {e}")
 
     return scene_data
 
-# ─── 로컬 SDXL-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
+def generate_moral_collage(moral_text, all_drawings):
+    """
+    마지막 교훈 페이지용 콜라주 이미지를 생성합니다.
+    """
+    try:
+        sketchbook_path = os.path.join(Config.BASE_DIR, "static", "images", "sketchbook.png")
+        if os.path.exists(sketchbook_path):
+            bg_img = Image.open(sketchbook_path).convert("RGBA")
+        else:
+            bg_img = Image.new('RGBA', (512, 768), (255, 253, 231, 255))
+        
+        bg_img = bg_img.resize((512, 768), Image.LANCZOS)
+        bg_w, bg_h = bg_img.size
+        
+        import random
+        # 모든 그림을 콜라주로 배치
+        for d in all_drawings:
+            d_path = d.get('file_path')
+            if not d_path: continue
+            d_full_path = os.path.join(Config.BASE_DIR, d_path.replace('/', os.sep))
+            if not os.path.exists(d_full_path): continue
+            
+            d_img = Image.open(d_full_path).convert("RGBA")
+            d_img = make_nukki(d_img)
+            
+            # 작게 리사이즈 및 회전
+            size = random.randint(150, 220)
+            d_img.thumbnail((size, size), Image.LANCZOS)
+            d_img = d_img.rotate(random.randint(-15, 15), expand=True, resample=Image.BICUBIC)
+            
+            # 상단 영역에 랜덤 배치 (하단 40%는 텍스트용)
+            px = random.randint(20, bg_w - d_img.width - 20)
+            py = random.randint(40, int(bg_h * 0.55) - d_img.height)
+            
+            bg_img.alpha_composite(d_img, (px, py))
+            
+        # 텍스트 렌더링
+        from PIL import ImageDraw, ImageFont
+        draw = ImageDraw.Draw(bg_img)
+        # '맑은고딕볼드' 폰트 시도
+        font_path = "C:\\Windows\\Fonts\\malgunbd.ttf"
+        try:
+            title_font = ImageFont.truetype(font_path, 36)
+            body_font = ImageFont.truetype(font_path, 24)
+        except:
+            title_font = ImageFont.load_default()
+            body_font = ImageFont.load_default()
+
+        # 제목 (PIL은 이모지 렌더링 불가 → 텍스트 별표 기호 사용)
+        draw.text((bg_w//2, int(bg_h * 0.65)), "★ 이야기의 교훈 ★", fill=(60, 60, 60, 255), font=title_font, anchor="mm")
+        
+        # 교훈 내용 (자동 줄바꿈)
+        lines = []
+        words = moral_text.split()
+        current_line = ""
+        for word in words:
+            test_line = current_line + " " + word
+            if draw.textbbox((0, 0), test_line, font=body_font)[2] < bg_w - 80:
+                current_line = test_line
+            else:
+                lines.append(current_line.strip())
+                current_line = word
+        lines.append(current_line.strip())
+        
+        y_text = int(bg_h * 0.73)
+        for line in lines:
+            draw.text((bg_w//2, y_text), line, fill=(80, 80, 80, 255), font=body_font, anchor="mm")
+            y_text += 28
+
+        # 저장
+        merged_filename = f"moral_{uuid.uuid4().hex[:8]}.jpg"
+        merged_filepath = os.path.join(Config.MERGED_DIR, merged_filename)
+        bg_img.convert("RGB").save(merged_filepath, "JPEG", quality=90)
+        
+        return f"static/generated/merged/{merged_filename}"
+
+    except Exception as e:
+        print(f"[Moral Collage Error] {e}")
+        return None
+
+# ─── 로컬 SD-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
 _pipe = None
 _pipe_load_failed = False   # 한번 실패하면 재시도 안 함 (앱 재시작까지)
 
@@ -141,14 +217,36 @@ def _get_pipe():
             _pipe_load_failed = True
             return None
 
-        from diffusers import AutoPipelineForText2Image
-        print("[로컬 SD] sd-turbo 모델 로딩 중 (최초 1회, 약 2GB)...")
+        from diffusers import AutoPipelineForText2Image, EulerAncestralDiscreteScheduler
+        print("[로컬 SD] SD-Turbo (FP16) 파이프라인 로딩 중...")
+        
+        # SD-Turbo 파이프라인 로드 (SDXL보다 가볍고 빠름)
         _pipe = AutoPipelineForText2Image.from_pretrained(
-            'stabilityai/sd-turbo',   # sdxl-turbo(6GB) → sd-turbo(2GB)
+            'stabilityai/sd-turbo',
             torch_dtype=torch.float16,
-        ).to('cuda')
-        _pipe.enable_attention_slicing()  # VRAM 추가 절약
-        print("[로컬 SD] sd-turbo 로딩 완료!")
+            variant='fp16'
+        ).to("cuda")
+        
+        # 스케줄러 설정
+        _pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(_pipe.scheduler.config)
+
+        # VRAM 효율화
+        try:
+            _pipe.enable_xformers_memory_efficient_attention()
+        except:
+            _pipe.enable_attention_slicing()
+
+        # TensorRT 기반 컴파일 적용 (선택 사항)
+        try:
+            import torch_tensorrt
+            print("[로컬 SD] TensorRT 엔진 컴파일 시도...")
+            _pipe.unet = torch.compile(_pipe.unet, mode="reduce-overhead", backend="tensorrt")
+            print("[로컬 SD] TensorRT 컴파일 완료!")
+        except Exception as compile_err:
+            print(f"[로컬 SD] TensorRT 컴파일 생략: {compile_err}")
+
+        print("[로컬 SD] SD-Turbo 로딩 완료!")
+
     except Exception as e:
         print(f"[로컬 SD] 로딩 실패: {e} → Pollinations.ai 폴백 모드로 전환")
         _pipe_load_failed = True
@@ -222,6 +320,8 @@ def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
     """
     장면 배경 이미지를 생성합니다.
     exclude_en: 배경에 그리지 않을 오브젝트 영어 키워드 (아이가 그린 그림 키워드)
+    - GPU(CUDA) + VRAM 충분: 로컬 SD-Turbo (FP16) 초고속 생성
+    - GPU 없거나 VRAM 부족: Pollinations.ai 자동 폴백
     Returns: 'static/generated/bgs/bg_xxx.jpg' or None
     """
     if not bg_text:
@@ -233,6 +333,7 @@ def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
     pipe = _get_pipe()
     if pipe is not None:
         try:
+            # SD-Turbo 스펙: 1~4 step
             image = pipe(
                 prompt=positive,
                 num_inference_steps=1,
@@ -252,6 +353,12 @@ def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
     return _generate_bg_pollinations(bg_text, exclude_en)
 
 
+def _check_cuda_available():
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
 
 def generate_scene_bgs_parallel(scene_data: list) -> list:
     """
@@ -281,7 +388,7 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
             except Exception as e:
                 print(f"[BG scene {i} 실패] {e}")
     else:
-        # Pollinations 폴백: 장면들을 동시에 처리
+        # Pollinations 폴백: 스레딩 병렬 처리 (통신 I/O 바운드 최적화)
         print(f"[BG] Pollinations 병렬 모드 — {len(indices)}개 장면 동시 처리")
         def _gen(i):
             excl = scene_data[i].get('exclude_en') or []
@@ -302,52 +409,42 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
     return scene_data
 
 
-def _check_cuda_available():
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except Exception:
-        return False
-
-
 
 def generate_reference_image(korean_word: str, english_word: str, image_prompt: str = None) -> str | None:
     """
-    아이가 그림 그릴 때 보여줄 참고 이미지를 Hugging Face Z-Image 로 생성합니다.
+    아이가 그림 그릴 때 보여줄 참고 이미지를 기존 HF 단일 API에서 
+    로컬 최적화 파이프라인 생성을 사용하도록 변경합니다.
     Returns: base64 data URI string, or None on failure
     """
-    if not Config.HUGGINGFACE_API_KEY:
-        print("[참고 이미지] HUGGINGFACE_API_KEY가 설정되지 않았습니다.")
-        return None
+    prompt = image_prompt or (
+        f"A cute, simple children's drawing reference of a {english_word}. "
+        f"Colorful cartoon style, friendly and approachable, clean white background, "
+        f"no text, suitable for 4 to 7 year old children. standalone object."
+    )
 
     try:
-        # Hugging Face Free Inference API
-        # (Tongyi-MAI/Z-Image-Turbo는 무료 API 서버리스를 미지원하여 SDXL로 임시 대체)
-        API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
-        headers = {"Authorization": f"Bearer {Config.HUGGINGFACE_API_KEY}"}
-
-        prompt = image_prompt or (
-            f"A cute, simple children's drawing reference of a {english_word}. "
-            f"Colorful cartoon style, friendly and approachable, white background, "
-            f"no text, suitable for 4-7 year old children."
-        )
-
-        payload = {
-            "inputs": prompt,
-        }
-
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code != 200:
-            print(f"[참고 이미지 API 오류] 상태 코드: {response.status_code}, 내용: {response.text}")
+        pipe = _get_pipe()
+        if pipe is None:
+            print("[밑그림] 파이프라인 로딩 오류")
             return None
-            
-        # Hugging Face Inference API returns image binary data directly
-        img_b64 = base64.b64encode(response.content).decode('utf-8')
-        return f"data:image/jpeg;base64,{img_b64}"
+        
+        # SD-Turbo 2 step 생성
+        image = pipe(
+            prompt=prompt,
+            num_inference_steps=2,
+            guidance_scale=0.0,
+            height=512, width=512,
+        ).images[0]
+        
+        import io
+        import base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG", quality=85)
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return f"data:image/jpeg;base64,{img_str}"
 
     except Exception as e:
-        print(f"[참고 이미지 생성 오류] {e}")
+        print(f"[로컬 SD 밑그림 생성 오류] {e}")
         return None
 
 def generate_story_illustration(title: str, keywords: list) -> str | None:
