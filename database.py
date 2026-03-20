@@ -244,7 +244,7 @@ def get_drawings_by_ids(drawing_ids):
         rows = conn.execute(f'''
             SELECT d.id, d.word_id, d.image_data, d.file_path, d.created_at,
                    w.korean, w.english, w.emoji
-            FROM drawings d JOIN words w ON d.word_id = w.id
+            FROM drawings d LEFT JOIN words w ON d.word_id = w.id
             WHERE d.id IN ({placeholders})
         ''', drawing_ids).fetchall()
         # 선택 순서(drawing_ids 순서)를 유지하여 반환

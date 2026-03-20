@@ -62,7 +62,7 @@
     cloudkingdom: `<div class="deco c1"></div><div class="deco c2"></div><div class="deco c3"></div>`,
     ice:          `<div class="deco snow1"></div><div class="deco snow2"></div><div class="deco snow3"></div><div class="deco aurora-line"></div>`,
     circus:       `<div class="deco sp1"></div><div class="deco sp2"></div><div class="deco sp3"></div><div class="deco sp4"></div>`,
-    flower:       `<div class="deco fl1"></div><div class="deco fl2"></div><div class="deco fl3"></div>`,
+    flower:       ``,
     default:      ``,
   };
 
@@ -153,9 +153,10 @@
       + '?width=512&height=768&nologo=true&seed=' + hashCode(bgText);
   }
 
-  function bgImgTag(scene) {
+  function bgImgTag(scene, preferBgOnly) {
     let url = null;
-    if (scene && scene.merged_image) {
+    // preferBgOnly=true: 표지처럼 드로잉 오버레이가 별도로 있을 때 merged_image 스킵
+    if (!preferBgOnly && scene && scene.merged_image) {
       url = '/' + scene.merged_image;
     } else if (scene && scene.bg_image) {
       url = '/' + scene.bg_image;
@@ -173,21 +174,121 @@
   // ═══════════════════════════════════════════════════════════════════════
   const SKY_KW = new Set(['별', '달', '구름', '무지개', '태양', '나비', '풍선']);
 
-  function isSky(d) { return d && SKY_KW.has(d.korean); }
+  // 텍스트 맥락에서 "땅에 내려온" 하늘 키워드 감지
+  const GROUNDED_PHRASES = ['내려왔', '떨어졌', '땅에', '바닥에', '앞에 놓', '손에 들', '품에', '가져', '주웠', '발견했'];
+  // 텍스트 맥락에서 "하늘로 올라간" ground 키워드 감지
+  const FLOATING_PHRASES = ['하늘로', '공중에', '둥실', '날아', '떠올라', '위로 올라', '하늘 위'];
+
+  function isSky(d, sceneText) {
+    if (!d) return false;
+    const isSkyKw = SKY_KW.has(d.korean);
+    if (!sceneText) return isSkyKw;
+
+    // 하늘 키워드인데 "땅에 내려온" 맥락 → ground로 배치
+    if (isSkyKw) {
+      for (const sent of sceneText.split(/[.!?。\n]/)) {
+        if (!sent.includes(d.korean)) continue;
+        if (GROUNDED_PHRASES.some(p => sent.includes(p))) return false;
+      }
+      return true;
+    }
+    // ground 키워드인데 "하늘로 올라간" 맥락 → sky로 배치
+    for (const sent of sceneText.split(/[.!?。\n]/)) {
+      if (!sent.includes(d.korean)) continue;
+      if (FLOATING_PHRASES.some(p => sent.includes(p))) return true;
+    }
+    return false;
+  }
+
+  // 수중 장면 감지 (bg 영어 텍스트 기준)
+  const UNDERWATER_KEYS = ['underwater','ocean floor','coral','deep sea','submarine','sea bottom','seabed','beneath the sea','under the sea','undersea'];
+  function isUnderwater(bgText) {
+    const bg = (bgText || '').toLowerCase();
+    return UNDERWATER_KEYS.some(k => bg.includes(k));
+  }
+
+  // 상상/소원 문맥 감지 — 키워드가 현재 장면에 없지만 꿈꾸는 대상으로 언급되는 경우
+  const DREAM_VERBS = ['상상','소원','꿈','꿈꾸','보고 싶','만져보','닿고 싶','갖고 싶','원했','바랐','그리웠'];
+  function isDreamContext(kw, sceneText) {
+    if (!kw || !sceneText) return false;
+    for (const sent of sceneText.split(/[.!?。\n]/)) {
+      if (!sent.includes(kw)) continue;
+      if (DREAM_VERBS.some(v => sent.includes(v))) return true;
+    }
+    return false;
+  }
+
+  // 스토리 텍스트에서 키워드의 크기/거리/강조 감지
+  // 1.5(매우 크게) / 1.2(가까이/강조) / 0.75(작게) / 0.6(멀리) / 1.0(보통)
+  const SIZE_BIG   = ['거대한','커다란','엄청나게','크고','크다란','온 하늘','가득','넓게','웅장한','엄청 큰','아주 큰','굉장히 큰','거대하게','우뚝','당당하게','웅장하게'];
+  const SIZE_SMALL = ['작은','조그만','조그마한','작고','아담한','아주 작은','귀엽고 작은','조그맣게','미니'];
+  // 거리감 — 멀리 있으면 작게, 가까이 있으면 크게
+  const DIST_FAR   = ['멀리서','저 멀리','멀리 보이는','저편에','저 멀리서','멀리 떨어진','멀리서 바라','뒤에 숨','구석에'];
+  const DIST_NEAR  = ['가까이','바로 앞에','눈앞에','코앞에','다가왔','앞으로 다가','바짝','손에 닿을'];
+  // 주인공/클라이맥스 강조 — 주인공 역할이면 크게
+  const PROMINENT  = ['주인공','중심에','한가운데','가운데에 서','활짝 펼쳐','용감하게 나','힘차게 달려'];
+
+  function getDrawingScale(kw, sceneText) {
+    if (!kw || !sceneText) return 1.0;
+    for (const sent of sceneText.split(/[.!?。\n]/)) {
+      if (!sent.includes(kw)) continue;
+      if (SIZE_BIG.some(w => sent.includes(w)))   return 1.5;
+      if (PROMINENT.some(w => sent.includes(w)))  return 1.3;
+      if (DIST_NEAR.some(w => sent.includes(w)))  return 1.2;
+      if (SIZE_SMALL.some(w => sent.includes(w))) return 0.75;
+      if (DIST_FAR.some(w => sent.includes(w)))   return 0.6;
+    }
+    return 1.0;
+  }
+
+  // 알려진 동사/오매칭 패턴 (해당 키워드가 다른 의미로 쓰이는 복합어)
+  const BAD_PATTERNS = {
+    '달': ['달리', '달래', '달랑', '달갑', '달콤', '달성'],
+    '집': ['집합', '집중', '집단', '집결', '집착'],
+    '배': ['배우', '배추', '배반'],
+    '별': ['별로', '별명', '별나', '별말'],
+    '산': ['산책', '산만', '산뜻'],
+    '꽃': ['꽃잎', '꽃봉', '꽃길', '꽃망울', '꽃가루'],
+    '나무': ['나무라'],
+  };
+
+  // 오매칭 패턴 제거 후 키워드 포함 여부 확인
+  function containsWord(text, keyword) {
+    if (!keyword || !text.includes(keyword)) return false;
+    let t = text;
+    for (const bad of (BAD_PATTERNS[keyword] || [])) {
+      t = t.split(bad).join('▪'); // 나쁜 패턴을 무효 문자로 대체
+    }
+    return t.includes(keyword);
+  }
 
   function mentioned(sceneText, allDrawings) {
     const t = sceneText || '';
-    return allDrawings.filter(d => d.korean && t.includes(d.korean));
+    return allDrawings.filter(d => d.korean && containsWord(t, d.korean));
   }
 
   function mapToScenes(allDrawings, scenes, count) {
-    return Array.from({ length: count }, (_, i) => {
+    const result = Array.from({ length: count }, (_, i) => {
       const sceneText = scenes && scenes[i] ? (scenes[i].text || '') : '';
       const hit = mentioned(sceneText, allDrawings);
       if (hit.length >= 2) return { primary: hit[0], secondary: hit[1] };
       if (hit.length === 1) return { primary: hit[0], secondary: null };
       return { primary: null, secondary: null };
     });
+
+    // 미배치 그림 후처리: 텍스트에 안 나온 그림을 빈 슬롯에 채움
+    const assigned = new Set();
+    result.forEach(r => {
+      if (r.primary)   assigned.add(r.primary.id);
+      if (r.secondary) assigned.add(r.secondary.id);
+    });
+    for (const d of allDrawings.filter(d => !assigned.has(d.id))) {
+      let placed = false;
+      for (const r of result) { if (!r.primary)   { r.primary   = d; placed = true; break; } }
+      if (!placed)
+        for (const r of result) { if (!r.secondary) { r.secondary = d; break; } }
+    }
+    return result;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -197,30 +298,50 @@
     return d.nukkiUrl || ('/' + d.file_path.replace(/^\/+/, ''));
   }
 
-  function drawingImgTag(d, cls) {
+  function groundStageHTML(d, extraClass, scale = 1.0) {
+    const isSub  = extraClass === 'ground-sub' || extraClass === 'ground-pair-r';
+    const isPair = extraClass === 'ground-pair-l' || extraClass === 'ground-pair-r';
+    const imgCls = isSub ? 'drawing-img sub-img' : 'drawing-img';
+    // vh 기반 크기 — 화면 크기에 비례 (scale 수식어 반영)
+    // ground-pair-l: 기본 38vh, ground-pair-r/sub: 32vh, 단독: 44vh
+    const baseH = isPair
+      ? (extraClass === 'ground-pair-l' ? 38 : 32)
+      : (isSub ? 32 : 44);
+    const h = (baseH * scale).toFixed(1);
+    const sizeStyle = `style="max-height:${h}vh"`;
+    // ground-pair 클래스는 'ground' 없이 독립 사용 (CSS right:0 충돌 방지)
+    const stageClass = isPair
+      ? `drawing-stage ${extraClass}`
+      : `drawing-stage ground${extraClass ? ' ' + extraClass : ''}`;
+    return `<div class="${stageClass}">
+      ${drawingImgTag(d, imgCls, sizeStyle)}
+      <div class="drawing-shadow${isSub ? ' small' : ''}"></div>
+    </div>`;
+  }
+
+  function skyStageHTML(d, posClass, scale = 1.0) {
+    // sky-right(구석)는 조금 작게, 중앙 sky는 더 크게
+    const baseH = (posClass === 'sky-right' || posClass === 'sky-right dream') ? 26 : 30;
+    const h = (baseH * scale).toFixed(1);
+    const sizeStyle = `style="max-height:${h}vh"`;
+    return `<div class="drawing-stage ${posClass || 'sky'}">
+      ${drawingImgTag(d, 'drawing-img sky-img', sizeStyle)}
+    </div>`;
+  }
+
+  // drawingImgTag에 sizeStyle 파라미터 추가
+  function drawingImgTag(d, cls, sizeStyle = '') {
     if (!d) return '';
     if (d.file_path) {
       return `<img src="${drawingSrc(d)}" alt="${d.korean || ''}"
-                   class="${cls}" onerror="this.style.display='none'">`;
+                   class="${cls}" ${sizeStyle} onerror="this.style.display='none'">`;
     }
     return `<div class="drawing-emoji-fallback">${d.emoji || '🎨'}</div>`;
   }
 
-  function groundStageHTML(d, extraClass) {
-    return `<div class="drawing-stage ground${extraClass ? ' ' + extraClass : ''}">
-      ${drawingImgTag(d, 'drawing-img')}
-      <div class="drawing-shadow${extraClass ? ' small' : ''}"></div>
-    </div>`;
-  }
-
-  function skyStageHTML(d, posClass) {
-    return `<div class="drawing-stage ${posClass || 'sky'}">
-      ${drawingImgTag(d, 'drawing-img sky-img')}
-    </div>`;
-  }
-
   function makeDrawingPageHTML(primary, secondary, scene) {
-    const bgText = scene && scene.bg ? scene.bg : '';
+    const bgText   = scene && scene.bg   ? scene.bg   : '';
+    const sceneText = scene && scene.text ? scene.text : '';
     const kwList = [
       ...(primary   ? [primary.korean]   : []),
       ...(secondary ? [secondary.korean] : []),
@@ -228,6 +349,22 @@
     ];
     const theme = getTheme(bgText, kwList);
     const deco  = DECO_HTML[theme.type] || '';
+
+    // 스토리 텍스트 기반 그림 크기 계산
+    const pScale = getDrawingScale(primary   && primary.korean,   sceneText);
+    // secondary는 primary 스케일의 85% 상한을 두어 항상 primary보다 작게 유지
+    const sScaleRaw = getDrawingScale(secondary && secondary.korean, sceneText);
+    const sScale = Math.min(sScaleRaw, pScale * 0.85);
+
+    // 장면 맥락 분석
+    const underwater = isUnderwater(bgText);
+    // 하늘 그림을 '꿈꾸는 효과'로 보여줄지 결정:
+    // 수중 배경이거나, 텍스트에서 상상/소원 문맥으로 언급될 때
+    function skyClass(d) {
+      if (!isSky(d, sceneText)) return null;
+      if (underwater || isDreamContext(d.korean, sceneText)) return 'dream';
+      return 'sky';
+    }
 
     // 만약 서버에서 병합된 이미지가 있다면, 개별 드로잉 레이어링은 생략합니다.
     const isMerged = !!(scene && scene.merged_image);
@@ -237,23 +374,29 @@
       <div class="scene-vignette"></div>`;
 
     if (isMerged) {
-        return html; // 이미 병합 이미지에 그림이 포함되어 있음
+        return html;
     }
 
     if (!primary && !secondary) {
       // 그림 없음
     } else if (!secondary) {
-      html += isSky(primary) ? skyStageHTML(primary, 'sky') : groundStageHTML(primary, '');
+      const pc = skyClass(primary);
+      html += pc ? skyStageHTML(primary, pc, pScale)
+                 : groundStageHTML(primary, '', pScale);
     } else {
-      const pSky = isSky(primary), sSky = isSky(secondary);
-      if (!pSky && sSky) {
-        html += groundStageHTML(primary, '') + skyStageHTML(secondary, 'sky');
-      } else if (pSky && !sSky) {
-        html += groundStageHTML(secondary, '') + skyStageHTML(primary, 'sky');
-      } else if (!pSky && !sSky) {
-        html += groundStageHTML(primary, '') + groundStageHTML(secondary, 'ground-sub');
+      const pSkyClass = skyClass(primary);
+      const sSkyClass = skyClass(secondary);
+      if (!pSkyClass && sSkyClass) {
+        html += groundStageHTML(primary, '', pScale) + skyStageHTML(secondary, sSkyClass, sScale);
+      } else if (pSkyClass && !sSkyClass) {
+        html += groundStageHTML(secondary, '', sScale) + skyStageHTML(primary, pSkyClass, pScale);
+      } else if (!pSkyClass && !sSkyClass) {
+        // 두 지상 그림 → 나란히 배치 (주인공 왼쪽, 보조 오른쪽)
+        html += groundStageHTML(primary, 'ground-pair-l', pScale) + groundStageHTML(secondary, 'ground-pair-r', sScale);
       } else {
-        html += skyStageHTML(primary, 'sky') + skyStageHTML(secondary, 'sky-right');
+        // secondary가 dream 맥락이면 sky-right에도 dream 효과 적용
+        const secSkyClass = (sSkyClass === 'dream') ? 'sky-right dream' : 'sky-right';
+        html += skyStageHTML(primary, pSkyClass, pScale) + skyStageHTML(secondary, secSkyClass, sScale);
       }
     }
     return html;
@@ -277,7 +420,7 @@
       paragraphs = SD.content.split(/\n/).map(p => p.trim()).filter(Boolean);
   }
 
-  const numContent = Math.max(drawings.length > 0 ? drawings.length : 1, paragraphs.length);
+  const numContent = Math.max(1, paragraphs.length);
 
   // ═══════════════════════════════════════════════════════════════════════
   // 7. 비동기 초기화
@@ -299,22 +442,16 @@
     // ── 페이지 배열 구성 ────────────────────────────────────────────────
     const pages = [];
 
-    function makeCoverLeftHTML(covDraw, covScene) {
+    function makeCoverLeftHTML(covScene) {
       const theme = getTheme(covScene ? covScene.bg : '', keywords);
       const deco  = DECO_HTML[theme.type] || '';
       // 표지는 병합된 이미지가 있더라도, 사용자의 그림을 더 크게 강조하기 위해
       // 원본 드로잉(누끼)을 위에 띄우는 방식을 유지하거나, 병합 이미지를 배경으로 씁니다.
       // 여기선 'AI 배경이 아닌 사용자 그림이 메인'이라는 요청에 따라 배경 투명도를 낮추거나 드로잉을 강조합니다.
       
-      return `<div class="scene-sky" style="background:${theme.sky}; opacity: 0.6;">${bgImgTag(covScene)}</div>
+      return `<div class="scene-sky" style="background:${theme.sky}; opacity: 0.6;">${bgImgTag(covScene, true)}</div>
         ${deco}
         <div class="scene-vignette"></div>
-        ${covDraw && covDraw.file_path
-          ? `<div class="drawing-stage ground cover-ground scale-up">
-               ${drawingImgTag(covDraw, 'drawing-img cover-img')}
-               <div class="drawing-shadow"></div>
-             </div>`
-          : ''}
         <div class="cover-title-overlay">
           <div class="cover-title-text">${SD.title}</div>
         </div>`;
@@ -365,14 +502,23 @@
     if (layoutData && layoutData.spreads && layoutData.spreads.length > 0) {
       for (const spec of layoutData.spreads) {
         if (spec.type === 'cover') {
-          const covDraw  = spec.drawingId ? pDrawings.find(d => d.id === spec.drawingId) : null;
           const covScene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : (scenes ? scenes[0] : null);
-          pages.push({ leftHTML: makeCoverLeftHTML(covDraw, covScene), rightInnerHTML: makeCoverRightHTML() });
+          pages.push({ leftHTML: makeCoverLeftHTML(covScene), rightInnerHTML: makeCoverRightHTML() });
         } else if (spec.type === 'content') {
-          const primary   = spec.primaryDrawingId   ? pDrawings.find(d => d.id === spec.primaryDrawingId)   : null;
-          const secondary = spec.secondaryDrawingId ? pDrawings.find(d => d.id === spec.secondaryDrawingId) : null;
-          const scene     = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
-          const text      = paragraphs[spec.textPageNum - 1] || '';
+          const scene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
+          const text  = (scene && scene.text) || paragraphs[spec.textPageNum - 1] || '';
+          let primary   = spec.primaryDrawingId   ? pDrawings.find(d => d.id === spec.primaryDrawingId)   : null;
+          let secondary = spec.secondaryDrawingId ? pDrawings.find(d => d.id === spec.secondaryDrawingId) : null;
+
+          // layoutData에 없는 그림을 텍스트 언급으로 보완 (누락 방지)
+          if (!primary || !secondary) {
+            const textHits = mentioned(text, pDrawings);
+            const shownIds = new Set([primary && primary.id, secondary && secondary.id].filter(Boolean));
+            const extra = textHits.filter(d => !shownIds.has(d.id));
+            if (!primary   && extra.length > 0) primary   = extra[0];
+            else if (!secondary && extra.length > 0) secondary = extra[0];
+          }
+
           pages.push({
             leftHTML:      makeDrawingPageHTML(primary, secondary, scene),
             rightInnerHTML: `<p class="story-text">${text}</p>`,
@@ -386,9 +532,7 @@
       // 기존 로직 (layout_data 없는 구버전 스토리)
       const assignment = mapToScenes(pDrawings, scenes, numContent);
       const covScene   = scenes && scenes[0] ? scenes[0] : null;
-      const covDraw    = pDrawings[0] || null;
-
-      pages.push({ leftHTML: makeCoverLeftHTML(covDraw, covScene), rightInnerHTML: makeCoverRightHTML() });
+      pages.push({ leftHTML: makeCoverLeftHTML(covScene), rightInnerHTML: makeCoverRightHTML() });
 
       for (let i = 0; i < numContent; i++) {
         const { primary, secondary } = assignment[i];

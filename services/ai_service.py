@@ -69,9 +69,14 @@ def _fix_korean_particles(text: str) -> str:
         return char + '으로'
     text = re.sub(r'([가-힣])(으로|로)' + B, _fix_euro, text)
 
-    # 은/는
+    # 은/는 — 단, 동사/형용사 관형형 어미 '는' 은 교정하지 않음
+    # (있는, 없는, 맞는, 먹는, 가는 등 → 조사 아님)
+    _VERB_BEFORE_NEUN = {'있', '없', '맞', '낫', '겠', '했', '갔', '왔', '봤', '됐',
+                         '먹', '가', '오', '보', '자', '나', '사', '타', '쓰', '크'}
     def _fix_eun_neun(m):
-        char = m.group(1)
+        char, josa = m.group(1), m.group(2)
+        if josa == '는' and char in _VERB_BEFORE_NEUN:
+            return char + '는'  # 관형형 어미 보호
         return char + ('은' if _has_batchim(char) else '는')
     text = re.sub(r'([가-힣])([은는])' + B, _fix_eun_neun, text)
 
@@ -133,14 +138,49 @@ _GENRES = [
 ]
 
 
-def _build_prompt(keywords: list) -> str:
+# ─── 사물/장소 분류 (의인화 방지) ─────────────────────────────────────────────
+_INANIMATE_WORDS = {
+    '집', '나무', '산', '성', '다리', '마을', '탑', '건물', '동굴',
+    '기차', '자동차', '배', '버스', '트럭',
+    '사과', '수박', '딸기', '당근', '바나나', '케이크', '아이스크림', '포도',
+    '구름', '별', '달', '태양', '무지개', '풍선', '연', '왕관', '마법지팡이',
+    '꽃', '바다',  # 자연 배경 요소 (의인화 금지)
+}
+
+
+def _kw_role(i: int, kw: str, all_keywords: list) -> str:
+    if kw in _INANIMATE_WORDS:
+        return f'  - [{i+1}] {kw}: 사물/장소 → 이야기 속 배경·소품·도구로 활용 (절대 의인화·고유명사화 금지)'
+    # 비사물 중 첫 번째 = 주인공 (i=0이 사물이어도 올바르게 지정)
+    first_alive = next((k for k in all_keywords if k not in _INANIMATE_WORDS), None)
+    label = '주인공 캐릭터' if kw == first_alive else '조연 캐릭터'
+    return f'  - [{i+1}] {kw}: {label} → 동물·사람 등 생명체로 등장'
+
+
+def _build_prompt(keywords: list, eng_keywords: list = None) -> str:
     """단어 목록으로 동화 생성 프롬프트를 만듭니다. 세계관·장르를 랜덤 선택해 다양성을 확보합니다."""
     world_name, world_desc = random.choice(_WORLDS)
     genre_name, genre_desc = random.choice(_GENRES)
 
-    role_hints = '\n'.join(
-        f'  - [{i+1}] {kw}: {"주인공" if i == 0 else "핵심 등장 요소"}'
-        for i, kw in enumerate(keywords)
+    role_hints = '\n'.join(_kw_role(i, kw, keywords) for i, kw in enumerate(keywords))
+    kw_list = ', '.join(keywords)
+
+    # bg 필드에서 제외해야 할 영어 키워드 (아이가 그린 그림 → 배경에 나오면 안 됨)
+    if eng_keywords:
+        excl_note = (
+            f"\n   ⛔ NEVER include these objects in bg (child drew them, will be placed on top): "
+            f"{', '.join(eng_keywords)}"
+        )
+    else:
+        excl_note = ""
+
+    bg_rule = (
+        f"pure environment scenery only in English"
+        f" (NO characters, NO animals, NO creatures, NO people{excl_note}"
+        f" — ONLY describe landscape/sky/weather/atmosphere like"
+        f" 'cotton candy clouds floating in pastel sky',"
+        f" 'rainbow bridge over sparkling river',"
+        f" 'magical glowing mushroom forest')"
     )
 
     return f"""당신은 4~7세 한국 어린이를 위한 창의적인 동화 작가입니다.
@@ -155,7 +195,10 @@ def _build_prompt(keywords: list) -> str:
 
 ★ 핵심 규칙
 - 위 세계관과 장르를 정확히 따라야 합니다 (자의적으로 바꾸지 마세요)
-- 각 단어는 단순 언급이 아닌, 줄거리를 이끄는 주인공/핵심 역할을 해야 합니다
+- 사물/장소 단어는 절대 의인화하거나 고유명사(캐릭터 이름)로 쓰지 마세요
+  예) '집'→주인공이 사는 집, '왕관'→주인공이 쓰는 왕관, '달'→하늘의 달
+- ⚠️ 위 단어 [{kw_list}] 은 모두 반드시 장면(text) 안에 직접 등장해야 합니다
+  단어를 빠뜨리면 안 됩니다. 4개 단락에 골고루 분산하세요
 - 단어들이 서로 만나고, 상호작용하며 이야기가 전개되어야 합니다
 
 작성 규칙:
@@ -168,13 +211,22 @@ def _build_prompt(keywords: list) -> str:
 {{
   "title": "동화 제목 (10자 이내)",
   "scenes": [
-    {{"text": "단락1 (2~3문장)", "bg": "pure environment background only in English (NO characters, NO creatures, NO animals, NO people — only landscape/sky/scenery like 'cotton candy clouds floating in pastel sky', 'rainbow bridge over sparkling river', 'magical glowing mushroom forest')"}},
-    {{"text": "단락2", "bg": "pure environment background only in English"}},
-    {{"text": "단락3", "bg": "pure environment background only in English"}},
-    {{"text": "단락4", "bg": "pure environment background only in English"}}
+    {{"text": "단락1 (2~3문장)", "bg": "{bg_rule}"}},
+    {{"text": "단락2", "bg": "{bg_rule}"}},
+    {{"text": "단락3", "bg": "{bg_rule}"}},
+    {{"text": "단락4", "bg": "{bg_rule}"}}
   ],
   "moral": "이 이야기의 교훈: ..."
 }}"""
+
+
+def _strip_markdown(text: str) -> str:
+    """Gemini가 반환하는 **굵은글씨** 마크다운을 제거합니다."""
+    if not text:
+        return text
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    return text
 
 
 def _parse_result(response_text: str) -> dict:
@@ -192,18 +244,18 @@ def _parse_result(response_text: str) -> dict:
     else:
         result['scene_data'] = None
 
-    # 조사 맞춤법 교정
+    # 마크다운 제거 후 조사 맞춤법 교정
     if result.get('title'):
-        result['title'] = _fix_korean_particles(result['title'])
+        result['title'] = _fix_korean_particles(_strip_markdown(result['title']))
     if result.get('scene_data'):
         for scene in result['scene_data']:
             if scene.get('text'):
-                scene['text'] = _fix_korean_particles(scene['text'])
+                scene['text'] = _fix_korean_particles(_strip_markdown(scene['text']))
         result['content'] = '\n\n'.join(s['text'] for s in result['scene_data'] if s.get('text'))
     elif result.get('content'):
-        result['content'] = _fix_korean_particles(result['content'])
+        result['content'] = _fix_korean_particles(_strip_markdown(result['content']))
     if result.get('moral'):
-        result['moral'] = _fix_korean_particles(result['moral'])
+        result['moral'] = _fix_korean_particles(_strip_markdown(result['moral']))
 
     return result
 
@@ -232,7 +284,8 @@ def _generate_with_gemini(keywords: list, drawings: list = None) -> dict:
         from google.genai import types
 
         client = genai.Client(api_key=Config.GEMINI_API_KEY)
-        prompt  = _build_prompt(keywords)
+        eng_keywords = [d.get('english', '') for d in (drawings or []) if d.get('english')]
+        prompt  = _build_prompt(keywords, eng_keywords)
         parts   = []
 
         # 그림이 있으면 Vision 포함
@@ -277,7 +330,8 @@ def _generate_with_claude(keywords: list, drawings: list = None) -> dict:
     try:
         import anthropic
         client    = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
-        prompt    = _build_prompt(keywords)
+        eng_keywords = [d.get('english', '') for d in (drawings or []) if d.get('english')]
+        prompt    = _build_prompt(keywords, eng_keywords)
         has_images = drawings and any(d.get('image_data') for d in drawings)
         content   = []
 
@@ -342,25 +396,101 @@ def generate_image_prompt(korean_word: str, english_word: str) -> str:
 
 
 def _fallback_story(keywords: list) -> dict:
-    """API 없을 때 기본 동화를 반환합니다."""
-    kw  = keywords[0] if keywords else "친구"
-    kw2 = keywords[1] if len(keywords) > 1 else "숲"
+    """API 없을 때 모든 키워드를 사용하는 기본 동화를 반환합니다."""
+    kws = keywords if keywords else ["친구"]
+
+    # 비사물 키워드 중 첫 번째를 주인공으로 선택 (사물 의인화 방지)
+    hero = next((kw for kw in kws if kw not in _INANIMATE_WORDS), None)
+    if hero is None:
+        hero = '토끼'  # 모든 키워드가 사물이면 기본 주인공 사용
+
+    others = [kw for kw in kws if kw != hero]
+    k1 = others[0] if len(others) > 0 else ''
+    k2 = others[1] if len(others) > 1 else ''
+    k3 = others[2] if len(others) > 2 else ''
+
+    _PLACE_WORDS      = {'집', '성', '동굴', '마을', '탑', '건물'}
+    _CELESTIAL_WORDS  = {'달', '별', '태양', '무지개', '구름'}
+    _PORTABLE_OBJECTS = {'왕관', '마법지팡이', '케이크', '아이스크림',
+                         '사과', '딸기', '수박', '바나나', '포도', '당근', '풍선'}
+
+    _LIGHT_CELESTIAL = {'달', '별', '태양'}   # 빛을 내는 천체
+
+    def intro_with_k1():
+        if not k1:
+            return f"{hero}는"
+        if k1 in _PLACE_WORDS:
+            return f"포근한 {k1} 안에 사는 {hero}는"
+        if k1 in _LIGHT_CELESTIAL:
+            return f"{k1}빛 아래 사는 {hero}는"
+        if k1 in _CELESTIAL_WORDS:           # 구름, 무지개 등
+            return f"{k1} 아래 사는 {hero}는"
+        if k1 in _PORTABLE_OBJECTS:
+            return f"{k1}를 소중히 여기는 {hero}는"
+        if k1 in _INANIMATE_WORDS:
+            return f"{k1} 곁에 사는 {hero}는"
+        return f"{k1}와 사이좋게 지내는 {hero}는"
+
+    def find_k2():
+        if not k2:
+            return "신기한 것을 발견했어요."
+        if k2 in _PLACE_WORDS:
+            return f"아름다운 {k2}을 발견했어요."
+        if k2 in _PORTABLE_OBJECTS:
+            return f"반짝이는 {k2}을 발견했어요."
+        if k2 in _CELESTIAL_WORDS:
+            return f"빛나는 {k2}을 발견했어요."
+        if k2 in _INANIMATE_WORDS:
+            return f"신기한 {k2}을 발견했어요."
+        return f"새로운 친구 {k2}을 만났어요."
+
+    def help_with_k2():
+        if not k2:
+            return ''
+        if k2 in _PORTABLE_OBJECTS:
+            return f" {k2}를 이용해"
+        if k2 in _INANIMATE_WORDS:
+            return f" {k2}의 도움으로"
+        return f" {k2}와 힘을 합쳐"
+
+    def scene3_end():
+        if not k3:
+            return "모두가 기뻐하며 환호했답니다."
+        if k3 in _INANIMATE_WORDS:
+            return f"{k3}이 환하게 빛났어요. 모두가 기뻐했답니다."
+        return f"{k3}도 함께 도와 모두가 기뻐했답니다."
+
+    def return_home():
+        if not k1:
+            return f"{hero}는 집으로 돌아왔어요."
+        if k1 in _PLACE_WORDS:
+            return f"{hero}는 {k1}으로 돌아왔어요."
+        if k1 in _PORTABLE_OBJECTS:
+            return f"{hero}는 {k1}을 가슴에 안고 집으로 돌아왔어요."
+        if k1 in _CELESTIAL_WORDS:
+            return f"{hero}는 {k1}을 바라보며 집으로 돌아왔어요."
+        if k1 in _INANIMATE_WORDS:
+            return f"{hero}는 집으로 돌아왔어요. {k1}이 환하게 빛났어요."
+        return f"{hero}는 {k1}과 함께 집으로 돌아왔어요."
+
     scenes = [
-        {"text": f"옛날 옛날에 {kw}가 {kw2}에 살았어요. {kw}는 항상 친구들에게 친절하고 다정했어요.",
-         "bg": f"magical {kw2} with warm sunlight filtering through trees"},
-        {"text": f"어느 날 작은 새 한 마리가 날개를 다쳐 떨어졌어요. {kw}는 새를 집으로 데려와 정성껏 돌봐주었어요.",
-         "bg": "cozy little house in the forest with warm golden light"},
-        {"text": f"며칠 후 새는 다시 건강해졌어요. 새는 고마운 마음에 아름다운 노래를 불러주었어요.",
-         "bg": "sunny meadow with blooming flowers and blue sky"},
-        {"text": f"그 소리를 듣고 마을의 모든 친구들이 모여 함께 춤을 추었어요. {kw}는 친구들과 함께라면 매일매일이 행복하다는 것을 알았어요.",
-         "bg": "cheerful village square with animals celebrating together"},
+        {"text": _fix_korean_particles(
+            f"옛날 옛날에 {intro_with_k1()} 오늘 멋진 모험을 떠나기로 했답니다."),
+         "bg": "magical sunlit meadow with soft clouds and colorful wildflowers"},
+        {"text": _fix_korean_particles(
+            f"{hero}는 길을 걷다가 {find_k2()}"),
+         "bg": "winding forest path with dappled sunlight and sparkling stream"},
+        {"text": _fix_korean_particles(
+            f"{hero}는{help_with_k2()} 용기를 내어 친구들을 도와주었어요. {scene3_end()}"),
+         "bg": "cheerful open field with rainbow in the sky and happy animals"},
+        {"text": _fix_korean_particles(
+            f"해가 질 무렵 {return_home()} 오늘 하루가 정말 행복했답니다."),
+         "bg": "warm sunset over a cozy village with glowing windows"},
     ]
-    for scene in scenes:
-        scene['text'] = _fix_korean_particles(scene['text'])
 
     return {
-        "title": _fix_korean_particles(f"{kw}의 모험"),
+        "title": _fix_korean_particles(f"{hero}의 멋진 하루"),
         "content": '\n\n'.join(s['text'] for s in scenes),
         "scene_data": scenes,
-        "moral": _fix_korean_particles("이 이야기의 교훈: 남을 도울 때 우리도 더 행복해질 수 있어요. 친절한 마음은 세상을 따뜻하게 만든답니다.")
+        "moral": _fix_korean_particles("이 이야기의 교훈: 용기를 내면 멋진 일이 생긴답니다. 친구와 함께라면 더욱 신나요!")
     }
