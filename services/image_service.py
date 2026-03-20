@@ -104,13 +104,15 @@ def flatten_scene_images(scene_data, all_drawings):
                 bg_img.alpha_composite(d_img, (px, py))
                 added_count += 1
 
-            # 최종 저장 (단일 이미지)
-            merged_filename = f"scene_{idx}_{uuid.uuid4().hex[:8]}.jpg"
-            merged_filepath = os.path.join(Config.MERGED_DIR, merged_filename)
-            bg_img.convert("RGB").save(merged_filepath, "JPEG", quality=90)
-            
-            scene['merged_image'] = f"static/generated/merged/{merged_filename}"
-            print(f"[Flattening] 장면 {idx} 병합 완료: {merged_filename}")
+            # 그림이 하나라도 합성된 경우에만 저장
+            if added_count > 0:
+                merged_filename = f"scene_{idx}_{uuid.uuid4().hex[:8]}.jpg"
+                merged_filepath = os.path.join(Config.MERGED_DIR, merged_filename)
+                bg_img.convert("RGB").save(merged_filepath, "JPEG", quality=90)
+                scene['merged_image'] = f"static/generated/merged/{merged_filename}"
+                print(f"[Flattening] 장면 {idx} 병합 완료: {merged_filename}")
+            else:
+                print(f"[Flattening] 장면 {idx}: 그림 없음, merged_image 생략 → JS 오버레이 사용")
 
         except Exception as e:
             print(f"[Flattening Error] {e}")

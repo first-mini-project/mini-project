@@ -224,12 +224,21 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   const currentPage = book.pages[currentPageIndex] || {};
   const currentPageContent = currentPage.content_kr || '';
 
-  // 현재 장면에 배치할 그림 결정 (storybook.js 의 mapToScenes 로직과 동일)
+  // 그림 배치: 페이지에 저장된 drawing ID 우선, 없으면 텍스트 매칭 폴백
   const drawings = book.drawings || [];
-  const hit = mentionedInScene(currentPage.content_kr, drawings);
-  // 언급된 그림이 없으면 페이지 인덱스 기반으로 순환 배치 (항상 그림 표시)
-  const primaryDrawing   = hit[0] || (drawings.length > 0 ? drawings[currentPageIndex % drawings.length] : null);
-  const secondaryDrawing = hit[1] || (drawings.length > 1 ? drawings[(currentPageIndex + 1) % drawings.length] : null);
+  let primaryDrawing, secondaryDrawing;
+  if (currentPage.primaryDrawingId !== undefined) {
+    primaryDrawing   = currentPage.primaryDrawingId
+      ? (drawings.find(d => d.id === currentPage.primaryDrawingId) || null)
+      : null;
+    secondaryDrawing = currentPage.secondaryDrawingId
+      ? (drawings.find(d => d.id === currentPage.secondaryDrawingId) || null)
+      : null;
+  } else {
+    const hit = mentionedInScene(currentPage.content_kr, drawings);
+    primaryDrawing   = hit[0] || null;
+    secondaryDrawing = hit[1] || null;
+  }
 
   function getDrawingSrc(d) {
     if (!d) return null;
@@ -243,7 +252,7 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
       <img
         src={src}
         alt={d.korean || ''}
-        style={{ position: 'absolute', maxWidth: '60%', maxHeight: '60%', objectFit: 'contain', ...style }}
+        style={{ position: 'absolute', zIndex: 2, maxWidth: '60%', maxHeight: '60%', objectFit: 'contain', ...style }}
       />
     );
   }
@@ -252,13 +261,10 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   function renderLeftPage() {
     const bgImage = currentPage.bgImage;
     const bgText  = currentPage.bgText || '';
-    const mergedImage = currentPage.mergedImage;
-
-    // storybook.js 와 동일: 서버 저장 파일 우선 → Pollinations.ai 폴백
+    // merged_image는 Python 텍스트매칭 기반 합성이라 선택된 그림이 빠질 수 있음
+    // → bg_image(순수 배경) + JS 오버레이 방식으로 storybook.js와 동일하게 처리
     let bgSrc = null;
-    if (mergedImage) {
-        bgSrc = '/' + mergedImage.replace(new RegExp('^/+'), '');
-    } else if (bgImage) {
+    if (bgImage) {
         bgSrc = '/' + bgImage.replace(new RegExp('^/+'), '');
     } else if (bgText) {
       const prompt = bgText
@@ -291,13 +297,13 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
           <div style={{ width: '100%', height: '100%', background: 'linear-gradient(to bottom, #87ceeb, #5cbf8a)' }} />
         )}
 
-        {/* 그림 합성 — storybook.js 와 동일한 배치 규칙 적용 */}
-        {!mergedImage && primaryDrawing && !secondaryDrawing && (
+        {/* 그림 합성 — layout_data 기반 오버레이 (항상 표시) */}
+        {primaryDrawing && !secondaryDrawing && (
           isSky(primaryDrawing)
             ? renderDrawing(primaryDrawing, { top: '8%', left: '50%', transform: 'translateX(-50%)' })
             : renderDrawing(primaryDrawing, { bottom: '5%', left: '50%', transform: 'translateX(-50%)' })
         )}
-        {!mergedImage && primaryDrawing && secondaryDrawing && (() => {
+        {primaryDrawing && secondaryDrawing && (() => {
           const pSky = isSky(primaryDrawing), sSky = isSky(secondaryDrawing);
           if (!pSky && sSky) return (<>
             {renderDrawing(primaryDrawing, { bottom: '5%', left: '20%' })}
@@ -512,19 +518,87 @@ function BookshelfApp() {
           parsedScenes = (typeof s.scene_data === 'string') ? JSON.parse(s.scene_data) : (s.scene_data || []);
         } catch(e) {}
 
+        let parsedLayout = null;
+        try {
+          parsedLayout = (typeof s.layout_data === 'string') ? JSON.parse(s.layout_data) : (s.layout_data || null);
+        } catch(e) {}
+
+        const allDrawings = s.drawings || [];
         const mappedPages = [];
-        if (parsedScenes && parsedScenes.length > 0) {
+
+        if (parsedLayout && parsedLayout.spreads && parsedLayout.spreads.length > 0) {
+          // ── 1단계: layout_data spreads → 페이지 데이터 수집 ──────────────
+          const pageDataList = [];
+          for (const spec of parsedLayout.spreads) {
+            if (spec.type === 'content') {
+              const si = spec.sceneIdx !== undefined ? spec.sceneIdx : 0;
+              // 배경: sceneIdx 범위 초과 방지 → 마지막 장면으로 폴백
+              const scene    = parsedScenes[si] || parsedScenes[parsedScenes.length - 1] || {};
+              // 텍스트: textPageNum 기준으로 가져오기 (범위 초과 시 빈 문자열)
+              const tpn      = spec.textPageNum || (pageDataList.length + 1);
+              const textSc   = parsedScenes[tpn - 1] || null;
+              pageDataList.push({
+                content_kr:         textSc ? (textSc.text || '') : '',
+                bgImage:            scene.bg_image    || null,
+                bgText:             scene.bg          || '',
+                mergedImage:        scene.merged_image || null,
+                primaryDrawingId:   spec.primaryDrawingId   || null,
+                secondaryDrawingId: spec.secondaryDrawingId || null,
+              });
+            } else if (spec.type === 'moral' && s.moral) {
+              // 교훈 페이지: 마지막 장면의 배경(bg_image)만 사용 (그림 없음)
+              const lastScene = parsedScenes.length > 0 ? parsedScenes[parsedScenes.length - 1] : {};
+              pageDataList.push({
+                content_kr:         `💡 교훈:\n${s.moral}`,
+                bgImage:            lastScene.bg_image || null,
+                bgText:             lastScene.bg       || '',
+                mergedImage:        null,
+                primaryDrawingId:   null,
+                secondaryDrawingId: null,
+                isMoral:            true,
+              });
+            }
+          }
+
+          // ── 2단계: 누락된 그림 감지 → 빈 슬롯에 배정 ─────────────────────
+          const usedIds = new Set();
+          pageDataList.forEach(pd => {
+            if (pd.primaryDrawingId)   usedIds.add(pd.primaryDrawingId);
+            if (pd.secondaryDrawingId) usedIds.add(pd.secondaryDrawingId);
+          });
+          const missing = allDrawings.filter(d => !usedIds.has(d.id));
+          for (const pd of pageDataList) {
+            if (!missing.length) break;
+            if (!pd.isMoral) {
+              if (!pd.primaryDrawingId)        pd.primaryDrawingId   = missing.shift().id;
+              else if (!pd.secondaryDrawingId) pd.secondaryDrawingId = missing.shift().id;
+            }
+          }
+
+          // ── 3단계: mappedPages로 변환 ─────────────────────────────────────
+          pageDataList.forEach((pd, i) => mappedPages.push({ page: i + 1, ...pd }));
+
+        } else if (parsedScenes && parsedScenes.length > 0) {
+          // layout_data 없는 구버전: scene_data 직접 사용
           parsedScenes.forEach((scene, i) => {
-            mappedPages.push({ 
-                page: i + 1, 
-                content_kr: scene.text, 
-                bgImage: scene.bg_image, 
-                bgText: scene.bg || '', 
-                mergedImage: scene.merged_image 
+            mappedPages.push({
+              page: i + 1,
+              content_kr:  scene.text,
+              bgImage:     scene.bg_image,
+              bgText:      scene.bg || '',
+              mergedImage: scene.merged_image,
             });
           });
           if (s.moral) {
-            mappedPages.push({ page: parsedScenes.length + 1, content_kr: `💡 교훈:\n${s.moral}` });
+            const lastScene = parsedScenes[parsedScenes.length - 1] || {};
+            mappedPages.push({
+              page:        parsedScenes.length + 1,
+              content_kr:  `💡 교훈:\n${s.moral}`,
+              bgImage:     lastScene.bg_image || null,
+              bgText:      lastScene.bg       || '',
+              mergedImage: null,
+              isMoral:     true,
+            });
           }
         } else {
           mappedPages.push({ page: 1, content_kr: s.content });
@@ -532,8 +606,8 @@ function BookshelfApp() {
         }
 
         // 표지 이미지는 첫 번째 장면의 병합 이미지를 우선적으로 사용
-        const coverImg = (parsedScenes && parsedScenes[0] && parsedScenes[0].merged_image) 
-                         ? parsedScenes[0].merged_image 
+        const coverImg = (parsedScenes && parsedScenes[0] && parsedScenes[0].merged_image)
+                         ? parsedScenes[0].merged_image
                          : s.illustration_path;
 
         return {
@@ -542,7 +616,7 @@ function BookshelfApp() {
           coverImage: coverImg,
           isRead: Boolean(s.is_read || s.isRead),
           pages: mappedPages,
-          drawings: s.drawings || []
+          drawings: allDrawings
         };
       });
       setBooks(mappedStories);

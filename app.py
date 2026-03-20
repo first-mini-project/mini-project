@@ -237,57 +237,68 @@ def api_generate_story():
 
         # 5. layout_data 생성 (정확한 스프레드 배치 저장)
         scenes = story_data.get('scene_data', [])
-        num_content = max(len(drawings), len(scenes)) if scenes else len(drawings)
-        
-        # 각 장면에 배치된 그림들 결정 (중복 제거하고 장면 텍스트 매칭)
-        def find_mentioned_drawings(scene_text, all_drawings):
-            """장면 텍스트에 언급된 그림들을 반환"""
-            text = scene_text or ''
-            result = []
-            for d in all_drawings:
-                if d.get('korean') and d['korean'] in text:
-                    result.append(d['id'])
-            return result
-        
-        layout_spreads = []
-        
-        # 표지
-        cover_drawing_id = drawings[0]['id'] if drawings else None
-        # 첫 번째 장면의 병합 이미지를 표지 배경으로 쓸 수도 있음 혹은 그냥 없이
-        cover_merged_image = scenes[0].get('merged_image') if scenes else None
+        # 장면 수 기준으로 페이지 수 결정 → 배경 없는 빈 페이지 방지
+        num_content = len(scenes) if scenes else len(drawings)
 
+        def find_mentioned_drawings(scene_text, all_drawings):
+            """장면 텍스트에 언급된 그림 id 목록 반환"""
+            text = scene_text or ''
+            return [d['id'] for d in all_drawings if d.get('korean') and d['korean'] in text]
+
+        # 1차: 장면 텍스트 매칭으로 그림 배정
+        assigned = {}
+        all_assigned_ids = set()
+        for i in range(num_content):
+            scene = scenes[i] if i < len(scenes) else None
+            mentioned = find_mentioned_drawings(scene.get('text', '') if scene else '', drawings)
+            p = mentioned[0] if len(mentioned) > 0 else None
+            s = mentioned[1] if len(mentioned) > 1 else None
+            assigned[i] = {'primary': p, 'secondary': s}
+            if p: all_assigned_ids.add(p)
+            if s: all_assigned_ids.add(s)
+
+        # 2차: 아직 배정 안 된 그림을 빈 슬롯에 채워 모든 그림이 등장하도록
+        unassigned = [d['id'] for d in drawings if d['id'] not in all_assigned_ids]
+        for i in range(num_content):
+            if not unassigned:
+                break
+            if assigned[i]['primary'] is None:
+                assigned[i]['primary'] = unassigned.pop(0)
+            elif assigned[i]['secondary'] is None:
+                assigned[i]['secondary'] = unassigned.pop(0)
+
+        # 3차: primary가 여전히 None이면 순환 폴백
+        for i in range(num_content):
+            if assigned[i]['primary'] is None:
+                assigned[i]['primary'] = drawings[i % len(drawings)]['id']
+
+        layout_spreads = []
+
+        # 표지
         layout_spreads.append({
             'type': 'cover',
-            'drawingId': cover_drawing_id,
-            'mergedImage': cover_merged_image, # 표지도 병합 이미지 사용 가능하게
+            'drawingId': drawings[0]['id'] if drawings else None,
             'sceneIdx': 0
         })
-        
+
         # 동화 내용 스프레드
         for i in range(num_content):
-            scene = scenes[i] if scenes and i < len(scenes) else None
-            mentioned_ids = []
-            if scene and scene.get('text'):
-                mentioned_ids = find_mentioned_drawings(scene['text'], drawings)
-            
-            primary_id = mentioned_ids[0] if len(mentioned_ids) > 0 else None
-            secondary_id = mentioned_ids[1] if len(mentioned_ids) > 1 else None
-            
+            scene = scenes[i] if i < len(scenes) else None
             layout_spreads.append({
                 'type': 'content',
                 'sceneIdx': i,
-                'primaryDrawingId': primary_id,
-                'secondaryDrawingId': secondary_id,
+                'primaryDrawingId': assigned[i]['primary'],
+                'secondaryDrawingId': assigned[i]['secondary'],
                 'mergedImage': scene.get('merged_image') if scene else None,
                 'textPageNum': i + 1
             })
-        
+
         # 교훈 페이지
         layout_spreads.append({'type': 'moral'})
-        
+
         # 종료 페이지
         layout_spreads.append({'type': 'end'})
-        
+
         layout_data = {'spreads': layout_spreads}
 
         # 6. DB 저장
@@ -363,4 +374,4 @@ if __name__ == '__main__':
     print(f"OpenAI API:    {'SET ✓' if Config.OPENAI_API_KEY    else 'NOT SET - no image gen'}")
     print("URL: http://localhost:5000")
     print("=" * 50)
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    app.run(debug=True, port=5000, host='0.0.0.0', use_reloader=False)

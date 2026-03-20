@@ -154,17 +154,19 @@
   }
 
   function bgImgTag(scene) {
-    let url = null;
-    if (scene && scene.merged_image) {
-      url = '/' + scene.merged_image;
-    } else if (scene && scene.bg_image) {
-      url = '/' + scene.bg_image;
-    } else if (scene && scene.bg) {
-      url = buildBgUrl(scene.bg);
-    }
-    if (!url) return '';
-    return `<img class="scene-bg-img" src="${url}" alt=""
-                 onerror="this.style.display='none'"
+    if (!scene) return '';
+    // 우선순위: bg_image(순수배경) → merged_image → pollinations(bg 텍스트)
+    // 로드 실패 시 다음 순서로 자동 폴백
+    const srcs = [
+      scene.bg_image     ? '/' + scene.bg_image                      : null,
+      scene.merged_image ? '/' + scene.merged_image                   : null,
+      scene.bg           ? buildBgUrl(scene.bg)                       : null,
+    ].filter(Boolean);
+    if (!srcs.length) return '';
+    const fallbackJson = JSON.stringify(srcs.slice(1)).replace(/'/g, '&#39;');
+    return `<img class="scene-bg-img" src="${srcs[0]}" alt=""
+                 data-fallbacks='${fallbackJson}'
+                 onerror="var f=JSON.parse(this.dataset.fallbacks||'[]');if(f.length){this.src=f.shift();this.dataset.fallbacks=JSON.stringify(f);}else{this.style.display='none';}"
                  onload="this.style.opacity='1'">`;
   }
 
@@ -181,13 +183,32 @@
   }
 
   function mapToScenes(allDrawings, scenes, count) {
-    return Array.from({ length: count }, (_, i) => {
+    // 1차: 장면 텍스트 매칭
+    const assigned = Array.from({ length: count }, (_, i) => {
       const sceneText = scenes && scenes[i] ? (scenes[i].text || '') : '';
       const hit = mentioned(sceneText, allDrawings);
-      if (hit.length >= 2) return { primary: hit[0], secondary: hit[1] };
-      if (hit.length === 1) return { primary: hit[0], secondary: null };
-      return { primary: null, secondary: null };
+      return { primary: hit[0] || null, secondary: hit[1] || null };
     });
+
+    // 2차: 미배정 그림을 빈 슬롯에 채움 (모든 그림이 등장하도록)
+    const assignedIds = new Set();
+    assigned.forEach(a => {
+      if (a.primary)   assignedIds.add(a.primary.id);
+      if (a.secondary) assignedIds.add(a.secondary.id);
+    });
+    const unassigned = allDrawings.filter(d => !assignedIds.has(d.id));
+    for (let i = 0; i < count && unassigned.length > 0; i++) {
+      if (!assigned[i].primary)        assigned[i].primary   = unassigned.shift();
+      else if (!assigned[i].secondary) assigned[i].secondary = unassigned.shift();
+    }
+
+    // 3차: primary가 여전히 null이면 순환 폴백
+    for (let i = 0; i < count; i++) {
+      if (!assigned[i].primary && allDrawings.length > 0)
+        assigned[i].primary = allDrawings[i % allDrawings.length];
+    }
+
+    return assigned;
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -213,6 +234,19 @@
     </div>`;
   }
 
+  // 두 ground 그림을 좌우로 나란히 배치 (겹침 방지)
+  function groundPairHTML(d1, d2) {
+    return `
+      <div class="drawing-stage" style="position:absolute;bottom:0;left:2%;width:46%;padding-bottom:16px;z-index:10;">
+        ${drawingImgTag(d1, 'drawing-img')}
+        <div class="drawing-shadow small"></div>
+      </div>
+      <div class="drawing-stage" style="position:absolute;bottom:0;right:2%;width:46%;padding-bottom:12px;z-index:9;">
+        ${drawingImgTag(d2, 'drawing-img')}
+        <div class="drawing-shadow small"></div>
+      </div>`;
+  }
+
   function skyStageHTML(d, posClass) {
     return `<div class="drawing-stage ${posClass || 'sky'}">
       ${drawingImgTag(d, 'drawing-img sky-img')}
@@ -229,16 +263,9 @@
     const theme = getTheme(bgText, kwList);
     const deco  = DECO_HTML[theme.type] || '';
 
-    // 만약 서버에서 병합된 이미지가 있다면, 개별 드로잉 레이어링은 생략합니다.
-    const isMerged = !!(scene && scene.merged_image);
-
     let html = `<div class="scene-sky" style="background:${theme.sky};">${bgImgTag(scene)}</div>
       ${deco}
       <div class="scene-vignette"></div>`;
-
-    if (isMerged) {
-        return html; // 이미 병합 이미지에 그림이 포함되어 있음
-    }
 
     if (!primary && !secondary) {
       // 그림 없음
@@ -251,7 +278,7 @@
       } else if (pSky && !sSky) {
         html += groundStageHTML(secondary, '') + skyStageHTML(primary, 'sky');
       } else if (!pSky && !sSky) {
-        html += groundStageHTML(primary, '') + groundStageHTML(secondary, 'ground-sub');
+        html += groundPairHTML(primary, secondary);
       } else {
         html += skyStageHTML(primary, 'sky') + skyStageHTML(secondary, 'sky-right');
       }
@@ -277,7 +304,10 @@
       paragraphs = SD.content.split(/\n/).map(p => p.trim()).filter(Boolean);
   }
 
-  const numContent = Math.max(drawings.length > 0 ? drawings.length : 1, paragraphs.length);
+  // 장면 수 기준으로 페이지 수 결정 → 배경 없는 빈 페이지 방지
+  const numContent = (scenes && scenes.length > 0)
+    ? scenes.length
+    : Math.max(drawings.length > 0 ? drawings.length : 1, paragraphs.length);
 
   // ═══════════════════════════════════════════════════════════════════════
   // 7. 비동기 초기화
@@ -363,24 +393,58 @@
     }
 
     if (layoutData && layoutData.spreads && layoutData.spreads.length > 0) {
+      // ── 1단계: spread → 페이지 데이터 수집 (HTML 렌더 전) ──────────────
+      const pageDataList = [];
       for (const spec of layoutData.spreads) {
         if (spec.type === 'cover') {
           const covDraw  = spec.drawingId ? pDrawings.find(d => d.id === spec.drawingId) : null;
-          const covScene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : (scenes ? scenes[0] : null);
-          pages.push({ leftHTML: makeCoverLeftHTML(covDraw, covScene), rightInnerHTML: makeCoverRightHTML() });
+          // sceneIdx 범위 초과 방지: 마지막 장면으로 폴백
+          const rawScene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
+          const covScene = rawScene || (scenes && scenes.length > 0 ? scenes[0] : null);
+          pageDataList.push({ kind: 'cover', covDraw, covScene });
         } else if (spec.type === 'content') {
           const primary   = spec.primaryDrawingId   ? pDrawings.find(d => d.id === spec.primaryDrawingId)   : null;
           const secondary = spec.secondaryDrawingId ? pDrawings.find(d => d.id === spec.secondaryDrawingId) : null;
-          const scene     = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
+          // sceneIdx 범위 초과 방지: 마지막 장면으로 폴백
+          const rawScene  = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
+          const scene     = rawScene || (scenes && scenes.length > 0 ? scenes[scenes.length - 1] : null);
           const text      = paragraphs[spec.textPageNum - 1] || '';
-          pages.push({
-            leftHTML:      makeDrawingPageHTML(primary, secondary, scene),
-            rightInnerHTML: `<p class="story-text">${text}</p>`,
-          });
+          pageDataList.push({ kind: 'content', primary, secondary, scene, text });
         } else if (spec.type === 'moral') {
-          pages.push({ leftHTML: makeMoralLeftHTML(), rightInnerHTML: makeEndRightHTML() });
+          pageDataList.push({ kind: 'moral' });
         }
         // 'end' type은 moral에서 처리됨
+      }
+
+      // ── 2단계: layout_data에서 누락된 그림 감지 후 빈 슬롯에 채우기 ────
+      const usedIds = new Set();
+      for (const pd of pageDataList) {
+        if (pd.kind === 'cover'   && pd.covDraw)    usedIds.add(pd.covDraw.id);
+        if (pd.kind === 'content' && pd.primary)    usedIds.add(pd.primary.id);
+        if (pd.kind === 'content' && pd.secondary)  usedIds.add(pd.secondary.id);
+      }
+      const missingDrawings = pDrawings.filter(d => !usedIds.has(d.id));
+      // primary/secondary가 null인 content 페이지에 순서대로 배정
+      for (const pd of pageDataList) {
+        if (!missingDrawings.length) break;
+        if (pd.kind === 'content') {
+          if (!pd.primary)        pd.primary   = missingDrawings.shift();
+          else if (!pd.secondary) pd.secondary = missingDrawings.shift();
+        }
+      }
+
+      // ── 3단계: 페이지 데이터 → HTML 렌더 ──────────────────────────────
+      for (const pd of pageDataList) {
+        if (pd.kind === 'cover') {
+          pages.push({ leftHTML: makeCoverLeftHTML(pd.covDraw, pd.covScene), rightInnerHTML: makeCoverRightHTML() });
+        } else if (pd.kind === 'content') {
+          pages.push({
+            leftHTML:       makeDrawingPageHTML(pd.primary, pd.secondary, pd.scene),
+            rightInnerHTML: `<p class="story-text">${pd.text}</p>`,
+          });
+        } else if (pd.kind === 'moral') {
+          pages.push({ leftHTML: makeMoralLeftHTML(), rightInnerHTML: makeEndRightHTML() });
+        }
       }
     } else {
       // 기존 로직 (layout_data 없는 구버전 스토리)
