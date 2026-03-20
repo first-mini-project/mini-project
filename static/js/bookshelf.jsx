@@ -71,7 +71,8 @@ function BookCover({ book, idx, onClick, onDelete }) {
       <button className="delete-book-btn" onClick={handleDelete} title="동화책 지우기">🗑️</button>
 
       <div className="book-decoration" style={{ fontSize: styleConf.shapeSize, color: styleConf.shapeColor }}>
-        {styleConf.shape}
+        {book.coverImage && <img src={'/' + book.coverImage.replace(/^\/+/, '')} alt="" className="book-cover-image-preview" />}
+        {!book.coverImage && styleConf.shape}
       </div>
 
       <div className="book-cover-title">{book.title}</div>
@@ -251,11 +252,14 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   function renderLeftPage() {
     const bgImage = currentPage.bgImage;
     const bgText  = currentPage.bgText || '';
+    const mergedImage = currentPage.mergedImage;
 
     // storybook.js 와 동일: 서버 저장 파일 우선 → Pollinations.ai 폴백
     let bgSrc = null;
-    if (bgImage) {
-      bgSrc = '/' + bgImage.replace(new RegExp('^/+'), '');
+    if (mergedImage) {
+        bgSrc = '/' + mergedImage.replace(new RegExp('^/+'), '');
+    } else if (bgImage) {
+        bgSrc = '/' + bgImage.replace(new RegExp('^/+'), '');
     } else if (bgText) {
       const prompt = bgText
         + ', children storybook illustration, watercolor art style, soft pastel colors,'
@@ -288,12 +292,12 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
         )}
 
         {/* 그림 합성 — storybook.js 와 동일한 배치 규칙 적용 */}
-        {primaryDrawing && !secondaryDrawing && (
+        {!mergedImage && primaryDrawing && !secondaryDrawing && (
           isSky(primaryDrawing)
             ? renderDrawing(primaryDrawing, { top: '8%', left: '50%', transform: 'translateX(-50%)' })
             : renderDrawing(primaryDrawing, { bottom: '5%', left: '50%', transform: 'translateX(-50%)' })
         )}
-        {primaryDrawing && secondaryDrawing && (() => {
+        {!mergedImage && primaryDrawing && secondaryDrawing && (() => {
           const pSky = isSky(primaryDrawing), sSky = isSky(secondaryDrawing);
           if (!pSky && sSky) return (<>
             {renderDrawing(primaryDrawing, { bottom: '5%', left: '20%' })}
@@ -511,7 +515,13 @@ function BookshelfApp() {
         const mappedPages = [];
         if (parsedScenes && parsedScenes.length > 0) {
           parsedScenes.forEach((scene, i) => {
-            mappedPages.push({ page: i + 1, content_kr: scene.text, bgImage: scene.bg_image, bgText: scene.bg || '' });
+            mappedPages.push({ 
+                page: i + 1, 
+                content_kr: scene.text, 
+                bgImage: scene.bg_image, 
+                bgText: scene.bg || '', 
+                mergedImage: scene.merged_image 
+            });
           });
           if (s.moral) {
             mappedPages.push({ page: parsedScenes.length + 1, content_kr: `💡 교훈:\n${s.moral}` });
@@ -521,10 +531,15 @@ function BookshelfApp() {
           if (s.moral) mappedPages.push({ page: 2, content_kr: `💡 교훈:\n${s.moral}` });
         }
 
+        // 표지 이미지는 첫 번째 장면의 병합 이미지를 우선적으로 사용
+        const coverImg = (parsedScenes && parsedScenes[0] && parsedScenes[0].merged_image) 
+                         ? parsedScenes[0].merged_image 
+                         : s.illustration_path;
+
         return {
           id: s.id,
           title: s.title,
-          coverImage: s.illustration_path,
+          coverImage: coverImg,
           isRead: Boolean(s.is_read || s.isRead),
           pages: mappedPages,
           drawings: s.drawings || []

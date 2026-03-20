@@ -155,7 +155,9 @@
 
   function bgImgTag(scene) {
     let url = null;
-    if (scene && scene.bg_image) {
+    if (scene && scene.merged_image) {
+      url = '/' + scene.merged_image;
+    } else if (scene && scene.bg_image) {
       url = '/' + scene.bg_image;
     } else if (scene && scene.bg) {
       url = buildBgUrl(scene.bg);
@@ -227,9 +229,16 @@
     const theme = getTheme(bgText, kwList);
     const deco  = DECO_HTML[theme.type] || '';
 
+    // 만약 서버에서 병합된 이미지가 있다면, 개별 드로잉 레이어링은 생략합니다.
+    const isMerged = !!(scene && scene.merged_image);
+
     let html = `<div class="scene-sky" style="background:${theme.sky};">${bgImgTag(scene)}</div>
       ${deco}
       <div class="scene-vignette"></div>`;
+
+    if (isMerged) {
+        return html; // 이미 병합 이미지에 그림이 포함되어 있음
+    }
 
     if (!primary && !secondary) {
       // 그림 없음
@@ -293,11 +302,15 @@
     function makeCoverLeftHTML(covDraw, covScene) {
       const theme = getTheme(covScene ? covScene.bg : '', keywords);
       const deco  = DECO_HTML[theme.type] || '';
-      return `<div class="scene-sky" style="background:${theme.sky};">${bgImgTag(covScene)}</div>
+      // 표지는 병합된 이미지가 있더라도, 사용자의 그림을 더 크게 강조하기 위해
+      // 원본 드로잉(누끼)을 위에 띄우는 방식을 유지하거나, 병합 이미지를 배경으로 씁니다.
+      // 여기선 'AI 배경이 아닌 사용자 그림이 메인'이라는 요청에 따라 배경 투명도를 낮추거나 드로잉을 강조합니다.
+      
+      return `<div class="scene-sky" style="background:${theme.sky}; opacity: 0.6;">${bgImgTag(covScene)}</div>
         ${deco}
         <div class="scene-vignette"></div>
         ${covDraw && covDraw.file_path
-          ? `<div class="drawing-stage ground cover-ground">
+          ? `<div class="drawing-stage ground cover-ground scale-up">
                ${drawingImgTag(covDraw, 'drawing-img cover-img')}
                <div class="drawing-shadow"></div>
              </div>`
