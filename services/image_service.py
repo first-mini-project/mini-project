@@ -3,19 +3,35 @@ import uuid
 import requests
 import base64
 import sys
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config import Config
 
 # ─── 로컬 SDXL-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
 _pipe = None
+_pipe_load_failed = False   # 한번 실패하면 재시도 안 함 (앱 재시작까지)
 
 def _get_pipe():
-    global _pipe
+    global _pipe, _pipe_load_failed
     if _pipe is not None:
         return _pipe
+    if _pipe_load_failed:
+        return None
     try:
         import torch
+        if not torch.cuda.is_available():
+            print("[로컬 SD] CUDA(GPU) 사용 불가 → Pollinations.ai 폴백 모드로 전환")
+            _pipe_load_failed = True
+            return None
+
+        # VRAM 여유 확인 (4GB 이상 필요)
+        free_vram = torch.cuda.mem_get_info()[0] / (1024**3)  # GB 단위
+        if free_vram < 4.0:
+            print(f"[로컬 SD] VRAM 여유 부족 ({free_vram:.1f}GB) → Pollinations.ai 폴백 모드로 전환")
+            _pipe_load_failed = True
+            return None
+
         from diffusers import AutoPipelineForText2Image
         print("[로컬 SD] 모델 로딩 중 (최초 1회)...")
         _pipe = AutoPipelineForText2Image.from_pretrained(
@@ -25,14 +41,51 @@ def _get_pipe():
         ).to('cuda')
         print("[로컬 SD] 모델 로딩 완료!")
     except Exception as e:
-        print(f"[로컬 SD] 로딩 실패: {e}")
+        print(f"[로컬 SD] 로딩 실패: {e} → Pollinations.ai 폴백 모드로 전환")
+        _pipe_load_failed = True
         _pipe = None
     return _pipe
 
 
+def _generate_bg_pollinations(bg_text: str) -> str | None:
+    """
+    GPU 없을 때 Pollinations.ai로 배경 이미지를 생성합니다. (무료, GPU 불필요)
+    Returns: 'static/generated/bgs/bg_xxx.jpg' or None
+    """
+    try:
+        prompt = (
+            bg_text
+            + ", children's storybook illustration, watercolor art style,"
+            + " soft pastel colors, magical whimsical background scenery,"
+            + " detailed environment, no characters, no people, no animals, no text, 2D illustration"
+        )
+        encoded = urllib.parse.quote(prompt)
+        seed = abs(hash(bg_text)) % 100000
+        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&seed={seed}&nologo=true&model=flux"
+
+        resp = requests.get(url, timeout=25)  # 타임아웃 단축
+        if resp.status_code != 200:
+            print(f"[Pollinations] 응답 오류: {resp.status_code}")
+            return None
+
+        filename = f"bg_{uuid.uuid4().hex[:16]}.jpg"
+        filepath = os.path.join(Config.BGS_DIR, filename)
+        with open(filepath, 'wb') as f:
+            f.write(resp.content)
+        print(f"[Pollinations BG] 생성 완료: {filename}")
+        return f"static/generated/bgs/{filename}"
+
+    except Exception as e:
+        print(f"[Pollinations BG 오류] {e}")
+        return None
+
+
+
 def generate_scene_bg(bg_text: str) -> str | None:
     """
-    로컬 SDXL-Turbo로 장면 배경 이미지를 생성하고 저장합니다.
+    장면 배경 이미지를 생성합니다.
+    - GPU(CUDA) + VRAM 4GB 이상: 로컬 SDXL-Turbo 사용
+    - GPU 없거나 VRAM 부족: Pollinations.ai 자동 폴백
     Returns: 'static/generated/bgs/bg_xxx.jpg' or None
     """
     if not bg_text:
@@ -45,34 +98,35 @@ def generate_scene_bg(bg_text: str) -> str | None:
         + " detailed environment, no characters, no people, no animals, no text, 2D illustration"
     )
 
-    try:
-        pipe = _get_pipe()
-        if pipe is None:
-            return None
+    # 1. 로컬 GPU 시도
+    pipe = _get_pipe()
+    if pipe is not None:
+        try:
+            image = pipe(
+                prompt=prompt,
+                num_inference_steps=1,
+                guidance_scale=0.0,
+                height=512, width=512,
+            ).images[0]
 
-        import torch
-        image = pipe(
-            prompt=prompt,
-            num_inference_steps=1,
-            guidance_scale=0.0,
-            height=512, width=512,
-        ).images[0]
+            filename = f"bg_{uuid.uuid4().hex[:16]}.jpg"
+            filepath = os.path.join(Config.BGS_DIR, filename)
+            image.save(filepath, format='JPEG', quality=90)
+            print(f"[로컬 SD BG] 생성 완료: {filename}")
+            return f"static/generated/bgs/{filename}"
+        except Exception as e:
+            print(f"[로컬 SD BG 오류] {e} → Pollinations.ai로 폴백")
 
-        filename = f"bg_{uuid.uuid4().hex[:16]}.jpg"
-        filepath = os.path.join(Config.BGS_DIR, filename)
-        image.save(filepath, format='JPEG', quality=90)
-        print(f"[로컬 SD BG] 생성 완료: {filename}")
-        return f"static/generated/bgs/{filename}"
+    # 2. Pollinations.ai 폴백
+    return _generate_bg_pollinations(bg_text)
 
-    except Exception as e:
-        print(f"[로컬 SD BG 오류] {e}")
-    return None
 
 
 def generate_scene_bgs_parallel(scene_data: list) -> list:
     """
-    scene_data의 각 장면에 대해 배경 이미지를 순차 생성합니다.
-    (GPU 메모리 충돌 방지를 위해 순차 처리)
+    scene_data의 각 장면에 대해 배경 이미지를 생성합니다.
+    - GPU 있음: 순차 처리 (VRAM 충돌 방지)
+    - GPU 없음(Pollinations 폴백): ThreadPoolExecutor로 병렬 처리 (속도 향상)
     """
     if not scene_data:
         return scene_data
@@ -81,17 +135,47 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
     if not indices:
         return scene_data
 
-    # GPU는 순차 처리 (병렬 시 VRAM 초과 위험)
-    for i in indices:
-        try:
-            path = generate_scene_bg(scene_data[i]['bg'])
-            if path:
-                scene_data[i]['bg_image'] = path
-                print(f"[BG scene {i}] {path}")
-        except Exception as e:
-            print(f"[BG scene {i} 실패] {e}")
+    # GPU 여부 판단
+    use_gpu = (_pipe is not None) or (not _pipe_load_failed and _check_cuda_available())
+
+    if use_gpu:
+        # GPU는 순차 처리 (VRAM 초과 방지)
+        for i in indices:
+            try:
+                path = generate_scene_bg(scene_data[i]['bg'])
+                if path:
+                    scene_data[i]['bg_image'] = path
+                    print(f"[BG scene {i}] {path}")
+            except Exception as e:
+                print(f"[BG scene {i} 실패] {e}")
+    else:
+        # Pollinations 폴백: 장면들을 동시에 처리
+        print(f"[BG] Pollinations 병렬 모드 — {len(indices)}개 장면 동시 처리")
+        def _gen(i):
+            path = _generate_bg_pollinations(scene_data[i]['bg'])
+            return i, path
+
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futures = {ex.submit(_gen, i): i for i in indices}
+            for f in as_completed(futures):
+                try:
+                    i, path = f.result()
+                    if path:
+                        scene_data[i]['bg_image'] = path
+                        print(f"[BG scene {i}] {path}")
+                except Exception as e:
+                    print(f"[BG scene 실패] {e}")
 
     return scene_data
+
+
+def _check_cuda_available():
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
 
 
 def generate_reference_image(korean_word: str, english_word: str, image_prompt: str = None) -> str | None:

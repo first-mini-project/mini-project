@@ -332,10 +332,11 @@
   // ═══════════════════════════════════════════════════════════════════════
   // 6. 데이터 파싱
   // ═══════════════════════════════════════════════════════════════════════
-  const SD       = JSON.parse(document.getElementById('story-data').textContent);
-  const drawings = SD.drawings  || [];
-  const scenes   = SD.scene_data || null;
-  const keywords = SD.keywords  || [];
+  const SD         = JSON.parse(document.getElementById('story-data').textContent);
+  const drawings   = SD.drawings  || [];
+  const scenes     = SD.scene_data || null;
+  const keywords   = SD.keywords  || [];
+  const layoutData = SD.layout_data || null;    // ← 새 필드
 
   let paragraphs = [];
   if (scenes && scenes.length) {
@@ -365,91 +366,188 @@
       });
     }
 
-    const assignment = mapToScenes(pDrawings, scenes, numContent);
-
     // ── 스프레드 배열 구성 ──────────────────────────────────────────────
     const spreads = [];
+    
+    // layout_data가 있으면 (새 동화) 그것을 사용, 없으면 기존 로직 사용
+    if (layoutData && layoutData.spreads && layoutData.spreads.length > 0) {
+      // 🎯 layout_data 사용 — 완벽한 재현
+      const layoutSpread = layoutData.spreads;
+      
+      for (const spec of layoutSpread) {
+        if (spec.type === 'cover') {
+          // 표지
+          const covDraw = spec.drawingId ? pDrawings.find(d => d.id === spec.drawingId) : null;
+          const covScene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : (scenes ? scenes[0] : null);
+          const covTheme = getTheme(covScene ? covScene.bg : '', keywords);
+          const covDeco = DECO_HTML[covTheme.type] || '';
+          
+          const coverLeftHTML = `
+            <div class="scene-sky" style="background:${covTheme.sky};">${bgImgTag(covScene)}</div>
+            ${covDeco}
+            <div class="scene-vignette"></div>
+            ${covDraw && covDraw.file_path
+              ? `<div class="drawing-stage ground cover-ground">
+                   ${drawingImgTag(covDraw, 'drawing-img cover-img')}
+                   <div class="drawing-shadow"></div>
+                 </div>`
+              : ''}
+            <div class="cover-title-overlay">
+              <div class="cover-title-text">${SD.title}</div>
+            </div>`;
+          
+          const coverRightHTML = `
+            <div class="cover-text-page b-page"
+                 style="width:100%;height:100%;border-radius:inherit;position:relative;
+                        box-sizing:border-box;display:flex;flex-direction:column;
+                        align-items:flex-start;justify-content:center;gap:16px;
+                        padding:36px 28px;background:#fffef9;">
+              <h1 class="book-main-title">${SD.title}</h1>
+              <div class="tts-row">
+                <button class="tts-play-btn" id="tts-play-btn" title="읽어주기">
+                  <span id="tts-play-icon">▶</span>
+                </button>
+                <span style="font-size:0.9rem;color:#666;">🔊 동화 읽어주기</span>
+              </div>
+              <div class="keywords-row">
+                ${keywords.map(k => `<span class="keyword-tag">${k}</span>`).join('')}
+              </div>
+              <p class="cover-hint">▶ 버튼을 눌러 페이지를 넘겨봐요!</p>
+            </div>`;
+          
+          spreads.push({ leftHTML: coverLeftHTML, rightHTML: coverRightHTML });
+        }
+        else if (spec.type === 'content') {
+          // 콘텐츠 스프레드
+          const primary   = spec.primaryDrawingId   ? pDrawings.find(d => d.id === spec.primaryDrawingId)   : null;
+          const secondary = spec.secondaryDrawingId ? pDrawings.find(d => d.id === spec.secondaryDrawingId) : null;
+          const scene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
+          
+          spreads.push({
+            leftHTML:  makeDrawingPageHTML(primary, secondary, scene),
+            rightHTML: makeTextPageHTML(paragraphs[spec.textPageNum - 1] || '', spec.textPageNum),
+          });
+        }
+        else if (spec.type === 'moral') {
+          // 교훈 페이지
+          const moralHTML = SD.moral
+            ? `<div class="moral-big-icon">💡</div>
+               <div class="moral-label-text">이야기의 교훈</div>
+               <p class="moral-body">${SD.moral}</p>`
+            : `<div class="moral-big-icon">📖</div>
+               <p class="moral-body">재미있는 이야기였나요?</p>`;
+          
+          spreads.push({
+            leftHTML: `<div class="moral-page b-page"
+                            style="width:100%;height:100%;border-radius:inherit;position:relative;
+                                   box-sizing:border-box;display:flex;flex-direction:column;
+                                   align-items:center;justify-content:center;gap:14px;
+                                   background:linear-gradient(145deg,#fffde7,#fff9c4);padding:28px 20px;">
+                         ${moralHTML}</div>`,
+            rightHTML: `<div class="end-page b-page"
+                             style="width:100%;height:100%;border-radius:inherit;position:relative;
+                                    box-sizing:border-box;display:flex;flex-direction:column;
+                                    align-items:center;justify-content:center;gap:16px;
+                                    background:#fffef9;padding:28px 20px;">
+                          <div class="end-big-icon">🎉</div>
+                          <h2 class="end-heading">끝!</h2>
+                          <div class="end-actions">
+                            <a href="/collection" class="btn btn-yellow btn-big">✨ 새 동화 만들기</a>
+                            <a href="/library"    class="btn btn-blue">📚 도서관으로</a>
+                            <button class="btn btn-white" id="delete-story-btn">🗑️ 삭제</button>
+                          </div>
+                        </div>`
+          });
+        }
+        else if (spec.type === 'end') {
+          // 이미 moral에서 처리됨
+        }
+      }
+    } else {
+      // 기존 로직 (layout_data 없는 경우)
+      const assignment = mapToScenes(pDrawings, scenes, numContent);
 
-    // [0] 표지
-    const covScene = scenes && scenes[0] ? scenes[0] : null;
-    const covTheme = getTheme(covScene ? covScene.bg : '', keywords);
-    const covDeco  = DECO_HTML[covTheme.type] || '';
-    const covDraw  = pDrawings[0] || null;
+      // [0] 표지
+      const covScene = scenes && scenes[0] ? scenes[0] : null;
+      const covTheme = getTheme(covScene ? covScene.bg : '', keywords);
+      const covDeco  = DECO_HTML[covTheme.type] || '';
+      const covDraw  = pDrawings[0] || null;
 
-    const coverLeftHTML = `
-      <div class="scene-sky" style="background:${covTheme.sky};">${bgImgTag(covScene)}</div>
-      ${covDeco}
-      <div class="scene-vignette"></div>
-      ${covDraw && covDraw.file_path
-        ? `<div class="drawing-stage ground cover-ground">
-             ${drawingImgTag(covDraw, 'drawing-img cover-img')}
-             <div class="drawing-shadow"></div>
-           </div>`
-        : ''}
-      <div class="cover-title-overlay">
-        <div class="cover-title-text">${SD.title}</div>
-      </div>`;
+      const coverLeftHTML = `
+        <div class="scene-sky" style="background:${covTheme.sky};">${bgImgTag(covScene)}</div>
+        ${covDeco}
+        <div class="scene-vignette"></div>
+        ${covDraw && covDraw.file_path
+          ? `<div class="drawing-stage ground cover-ground">
+               ${drawingImgTag(covDraw, 'drawing-img cover-img')}
+               <div class="drawing-shadow"></div>
+             </div>`
+          : ''}
+        <div class="cover-title-overlay">
+          <div class="cover-title-text">${SD.title}</div>
+        </div>`;
 
-    const coverRightHTML = `
-      <div class="cover-text-page b-page"
-           style="width:100%;height:100%;border-radius:inherit;position:relative;
-                  box-sizing:border-box;display:flex;flex-direction:column;
-                  align-items:flex-start;justify-content:center;gap:16px;
-                  padding:36px 28px;background:#fffef9;">
-        <h1 class="book-main-title">${SD.title}</h1>
-        <div class="tts-row">
-          <button class="tts-play-btn" id="tts-play-btn" title="읽어주기">
-            <span id="tts-play-icon">▶</span>
-          </button>
-          <span style="font-size:0.9rem;color:#666;">🔊 동화 읽어주기</span>
-        </div>
-        <div class="keywords-row">
-          ${keywords.map(k => `<span class="keyword-tag">${k}</span>`).join('')}
-        </div>
-        <p class="cover-hint">▶ 버튼을 눌러 페이지를 넘겨봐요!</p>
-      </div>`;
+      const coverRightHTML = `
+        <div class="cover-text-page b-page"
+             style="width:100%;height:100%;border-radius:inherit;position:relative;
+                    box-sizing:border-box;display:flex;flex-direction:column;
+                    align-items:flex-start;justify-content:center;gap:16px;
+                    padding:36px 28px;background:#fffef9;">
+          <h1 class="book-main-title">${SD.title}</h1>
+          <div class="tts-row">
+            <button class="tts-play-btn" id="tts-play-btn" title="읽어주기">
+              <span id="tts-play-icon">▶</span>
+            </button>
+            <span style="font-size:0.9rem;color:#666;">🔊 동화 읽어주기</span>
+          </div>
+          <div class="keywords-row">
+            ${keywords.map(k => `<span class="keyword-tag">${k}</span>`).join('')}
+          </div>
+          <p class="cover-hint">▶ 버튼을 눌러 페이지를 넘겨봐요!</p>
+        </div>`;
 
-    spreads.push({ leftHTML: coverLeftHTML, rightHTML: coverRightHTML });
+      spreads.push({ leftHTML: coverLeftHTML, rightHTML: coverRightHTML });
 
-    // [1..N] 동화 내용 스프레드
-    for (let i = 0; i < numContent; i++) {
-      const { primary, secondary } = assignment[i];
-      const scene = scenes && scenes[i] ? scenes[i] : null;
+      // [1..N] 동화 내용 스프레드
+      for (let i = 0; i < numContent; i++) {
+        const { primary, secondary } = assignment[i];
+        const scene = scenes && scenes[i] ? scenes[i] : null;
+        spreads.push({
+          leftHTML:  makeDrawingPageHTML(primary, secondary, scene),
+          rightHTML: makeTextPageHTML(paragraphs[i] || '', i + 1),
+        });
+      }
+
+      // [마지막] 교훈 + 종료
+      const moralHTML = SD.moral
+        ? `<div class="moral-big-icon">💡</div>
+           <div class="moral-label-text">이야기의 교훈</div>
+           <p class="moral-body">${SD.moral}</p>`
+        : `<div class="moral-big-icon">📖</div>
+           <p class="moral-body">재미있는 이야기였나요?</p>`;
+
       spreads.push({
-        leftHTML:  makeDrawingPageHTML(primary, secondary, scene),
-        rightHTML: makeTextPageHTML(paragraphs[i] || '', i + 1),
+        leftHTML: `<div class="moral-page b-page"
+                        style="width:100%;height:100%;border-radius:inherit;position:relative;
+                               box-sizing:border-box;display:flex;flex-direction:column;
+                               align-items:center;justify-content:center;gap:14px;
+                               background:linear-gradient(145deg,#fffde7,#fff9c4);padding:28px 20px;">
+                     ${moralHTML}</div>`,
+        rightHTML: `<div class="end-page b-page"
+                         style="width:100%;height:100%;border-radius:inherit;position:relative;
+                                box-sizing:border-box;display:flex;flex-direction:column;
+                                align-items:center;justify-content:center;gap:16px;
+                                background:#fffef9;padding:28px 20px;">
+                      <div class="end-big-icon">🎉</div>
+                      <h2 class="end-heading">끝!</h2>
+                      <div class="end-actions">
+                        <a href="/collection" class="btn btn-yellow btn-big">✨ 새 동화 만들기</a>
+                        <a href="/library"    class="btn btn-blue">📚 도서관으로</a>
+                        <button class="btn btn-white" id="delete-story-btn">🗑️ 삭제</button>
+                      </div>
+                    </div>`,
       });
     }
-
-    // [마지막] 교훈 + 종료
-    const moralHTML = SD.moral
-      ? `<div class="moral-big-icon">💡</div>
-         <div class="moral-label-text">이야기의 교훈</div>
-         <p class="moral-body">${SD.moral}</p>`
-      : `<div class="moral-big-icon">📖</div>
-         <p class="moral-body">재미있는 이야기였나요?</p>`;
-
-    spreads.push({
-      leftHTML: `<div class="moral-page b-page"
-                      style="width:100%;height:100%;border-radius:inherit;position:relative;
-                             box-sizing:border-box;display:flex;flex-direction:column;
-                             align-items:center;justify-content:center;gap:14px;
-                             background:linear-gradient(145deg,#fffde7,#fff9c4);padding:28px 20px;">
-                   ${moralHTML}</div>`,
-      rightHTML: `<div class="end-page b-page"
-                       style="width:100%;height:100%;border-radius:inherit;position:relative;
-                              box-sizing:border-box;display:flex;flex-direction:column;
-                              align-items:center;justify-content:center;gap:16px;
-                              background:#fffef9;padding:28px 20px;">
-                    <div class="end-big-icon">🎉</div>
-                    <h2 class="end-heading">끝!</h2>
-                    <div class="end-actions">
-                      <a href="/collection" class="btn btn-yellow btn-big">✨ 새 동화 만들기</a>
-                      <a href="/library"    class="btn btn-blue">📚 도서관으로</a>
-                      <button class="btn btn-white" id="delete-story-btn">🗑️ 삭제</button>
-                    </div>
-                  </div>`,
-    });
 
     // ── DOM 참조 & 상태 ──────────────────────────────────────────────────
     const staticLeft = document.getElementById('b-static-left');
