@@ -181,10 +181,14 @@
       saveBtn.textContent = '저장 중...';
 
       try {
-        const res = await fetch('/api/drawing/save', {
+        const replaceId = saveBtn.dataset.replaceId;
+      const body = { word_id: parseInt(wordId), image_data: imageData };
+      if (replaceId) body.replace_drawing_id = parseInt(replaceId);
+
+      const res = await fetch('/api/drawing/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word_id: parseInt(wordId), image_data: imageData })
+          body: JSON.stringify(body)
         });
         const data = await res.json();
 
@@ -299,6 +303,18 @@
 
   // ─── 초기화 ─────────────────────────────────────────────────────────────────
   initCanvas();
+
+  // 기존 그림이 있으면 캔버스에 불러오기
+  const existingImageUrl = canvas.dataset.existingImage;
+  if (existingImageUrl) {
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      saveHistory();
+    };
+    img.src = existingImageUrl;
+  }
+
   // 기본 색상 선택 (검정)
   const defaultColorBtn = document.querySelector('.color-btn[data-color="#333333"]');
   if (defaultColorBtn) defaultColorBtn.classList.add('active');

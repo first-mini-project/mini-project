@@ -199,9 +199,23 @@ def get_all_drawings():
             SELECT d.id, d.word_id, d.file_path, d.created_at,
                    w.korean, w.english, w.emoji, w.category
             FROM drawings d JOIN words w ON d.word_id = w.id
-            ORDER BY d.created_at DESC
+            ORDER BY w.korean ASC
         ''').fetchall()
         return [dict(r) for r in rows]
+
+
+def delete_drawing(drawing_id):
+    with get_db() as conn:
+        conn.execute('DELETE FROM drawings WHERE id=?', (drawing_id,))
+
+
+def get_drawing_by_word_id(word_id):
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT * FROM drawings WHERE word_id=? ORDER BY created_at DESC LIMIT 1',
+            (word_id,)
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def get_drawing_with_data(drawing_id):
