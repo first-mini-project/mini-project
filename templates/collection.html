@@ -75,6 +75,19 @@
   <div class="loading-text" id="loading-text">동화를 만들고 있어요...</div>
   <div class="loading-sub">AI가 열심히 이야기를 쓰고 있어요 🤖</div>
 </div>
+
+<!-- ── 레벨업 모달 ── -->
+<div class="level-up-modal" id="level-up-modal">
+  <div class="level-up-box">
+    <span class="level-up-badge" id="level-up-badge">🌱</span>
+    <h2 class="level-up-title" id="level-up-title">레벨 업!</h2>
+    <p class="level-up-msg" id="level-up-msg">새로운 작가 등급을 획득했어요!</p>
+    <div class="level-up-unlocked" id="level-up-unlocked">🔓 새로운 도구가 열렸어요!</div>
+    <button class="btn btn-purple" onclick="document.getElementById('level-up-modal').classList.remove('show')">확인</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
 {% endblock %}
 
 {% block scripts %}

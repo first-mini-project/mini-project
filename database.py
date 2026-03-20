@@ -291,6 +291,7 @@ def get_all_stories():
             s['keywords'] = json.loads(s['keywords'])
             s['drawing_ids'] = json.loads(s['drawing_ids'])
             s['scene_data'] = json.loads(s['scene_data']) if s.get('scene_data') else None
+            s['layout_data'] = json.loads(s['layout_data']) if s.get('layout_data') else None
             result.append(s)
         return result
 
@@ -303,3 +304,9 @@ def delete_story(story_id):
 def mark_story_read(story_id):
     with get_db() as conn:
         conn.execute('UPDATE stories SET is_read = 1 WHERE id=?', (story_id,))
+
+def get_story_count():
+    """전체 생성된 동화책의 개수를 반환합니다."""
+    with get_db() as conn:
+        row = conn.execute('SELECT COUNT(*) FROM stories').fetchone()
+        return row[0] if row else 0
