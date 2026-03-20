@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config import Config
 
-# ─── 로컬 SDXL-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
+# ─── 로컬 초고속 파이프라인 (SD-Turbo FP16) ────────
 _pipe = None
 
 def _get_pipe():
@@ -16,14 +16,43 @@ def _get_pipe():
         return _pipe
     try:
         import torch
-        from diffusers import AutoPipelineForText2Image
-        print("[로컬 SD] 모델 로딩 중 (최초 1회)...")
+        from diffusers import AutoPipelineForText2Image, EulerAncestralDiscreteScheduler
+        print("[로컬 SD] SD-Turbo (FP16) 파이프라인 로딩 중...")
+        
+        # SD-Turbo 파이프라인 로드 (SDXL보다 가볍고 빠름)
         _pipe = AutoPipelineForText2Image.from_pretrained(
-            'stabilityai/sdxl-turbo',
+            'stabilityai/sd-turbo',
             torch_dtype=torch.float16,
-            variant='fp16',
-        ).to('cuda')
-        print("[로컬 SD] 모델 로딩 완료!")
+            variant='fp16'
+        )
+        
+        # GPU 확인 및 할당
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _pipe.to(device)
+
+        # 스케줄러 설정
+        _pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(_pipe.scheduler.config)
+
+        # VRAM 효율화
+        try:
+            _pipe.enable_xformers_memory_efficient_attention()
+        except:
+            _pipe.enable_attention_slicing()
+
+        # TensorRT 기반 컴파일 적용 (선택 사항)
+        try:
+            import torch_tensorrt
+            print("[로컬 SD] TensorRT 엔진 컴파일 시도...")
+            _pipe.unet = torch.compile(_pipe.unet, mode="reduce-overhead", backend="tensorrt")
+            print("[로컬 SD] TensorRT 컴파일 완료!")
+        except Exception as compile_err:
+            print(f"[로컬 SD] TensorRT 컴파일 생략: {compile_err}")
+
+        if device == "cpu":
+            print("[로컬 SD] CUDA를 찾을 수 없어 CPU 모드로 동작합니다.")
+
+        print("[로컬 SD] SD-Turbo 로딩 완료!")
+
     except Exception as e:
         print(f"[로컬 SD] 로딩 실패: {e}")
         _pipe = None
@@ -32,8 +61,7 @@ def _get_pipe():
 
 def generate_scene_bg(bg_text: str) -> str | None:
     """
-    로컬 SDXL-Turbo로 장면 배경 이미지를 생성하고 저장합니다.
-    Returns: 'static/generated/bgs/bg_xxx.jpg' or None
+    로컬 최적화 파이프라인으로 장면 배경 이미지를 매우 빠르게 생성합니다.
     """
     if not bg_text:
         return None
@@ -50,10 +78,10 @@ def generate_scene_bg(bg_text: str) -> str | None:
         if pipe is None:
             return None
 
-        import torch
+        # SD-Turbo 스펙: 1~4 step
         image = pipe(
             prompt=prompt,
-            num_inference_steps=1,
+            num_inference_steps=2,
             guidance_scale=0.0,
             height=512, width=512,
         ).images[0]
@@ -72,7 +100,6 @@ def generate_scene_bg(bg_text: str) -> str | None:
 def generate_scene_bgs_parallel(scene_data: list) -> list:
     """
     scene_data의 각 장면에 대해 배경 이미지를 순차 생성합니다.
-    (GPU 메모리 충돌 방지를 위해 순차 처리)
     """
     if not scene_data:
         return scene_data
@@ -81,7 +108,7 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
     if not indices:
         return scene_data
 
-    # GPU는 순차 처리 (병렬 시 VRAM 초과 위험)
+    # VRAM 관리를 위해 순차 처리
     for i in indices:
         try:
             path = generate_scene_bg(scene_data[i]['bg'])
@@ -96,41 +123,38 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
 
 def generate_reference_image(korean_word: str, english_word: str, image_prompt: str = None) -> str | None:
     """
-    아이가 그림 그릴 때 보여줄 참고 이미지를 Hugging Face Z-Image 로 생성합니다.
+    아이가 그림 그릴 때 보여줄 참고 이미지를 기존 HF 단일 API에서 
+    로컬 최적화 파이프라인 생성을 사용하도록 변경합니다.
     Returns: base64 data URI string, or None on failure
     """
-    if not Config.HUGGINGFACE_API_KEY:
-        print("[참고 이미지] HUGGINGFACE_API_KEY가 설정되지 않았습니다.")
-        return None
+    prompt = image_prompt or (
+        f"A cute, simple children's drawing reference of a {english_word}. "
+        f"Colorful cartoon style, friendly and approachable, clean white background, "
+        f"no text, suitable for 4 to 7 year old children. standalone object."
+    )
 
     try:
-        # Hugging Face Free Inference API
-        # (Tongyi-MAI/Z-Image-Turbo는 무료 API 서버리스를 미지원하여 SDXL로 임시 대체)
-        API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
-        headers = {"Authorization": f"Bearer {Config.HUGGINGFACE_API_KEY}"}
-
-        prompt = image_prompt or (
-            f"A cute, simple children's drawing reference of a {english_word}. "
-            f"Colorful cartoon style, friendly and approachable, white background, "
-            f"no text, suitable for 4-7 year old children."
-        )
-
-        payload = {
-            "inputs": prompt,
-        }
-
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code != 200:
-            print(f"[참고 이미지 API 오류] 상태 코드: {response.status_code}, 내용: {response.text}")
+        pipe = _get_pipe()
+        if pipe is None:
+            print("[밑그림] 파이프라인 로딩 오류")
             return None
-            
-        # Hugging Face Inference API returns image binary data directly
-        img_b64 = base64.b64encode(response.content).decode('utf-8')
-        return f"data:image/jpeg;base64,{img_b64}"
+        
+        image = pipe(
+            prompt=prompt,
+            num_inference_steps=2,
+            guidance_scale=0.0,
+            height=512, width=512,
+        ).images[0]
+        
+        import io
+        import base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG", quality=85)
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return f"data:image/jpeg;base64,{img_str}"
 
     except Exception as e:
-        print(f"[참고 이미지 생성 오류] {e}")
+        print(f"[로컬 SD 밑그림 생성 오류] {e}")
         return None
 
 def generate_story_illustration(title: str, keywords: list) -> str | None:

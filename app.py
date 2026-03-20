@@ -149,7 +149,6 @@ def api_drawing_help():
     data = request.get_json()
     korean = data.get('korean', '')
     english = data.get('english', '')
-
     # Claude로 최적화된 이미지 프롬프트 생성
     image_prompt = ai_service.generate_image_prompt(korean, english)
 
@@ -161,7 +160,7 @@ def api_drawing_help():
     else:
         return jsonify({
             'success': False,
-            'error': 'AI 그림 생성을 위해 HUGGINGFACE_API_KEY가 필요하거나 요청에 실패했어요'
+            'error': '오류가 발생했습니다 (모델 로딩 중이거나 첫 실행이라 준비 중일 수 있습니다)'
         })
 
 
@@ -268,4 +267,4 @@ if __name__ == '__main__':
     print(f"OpenAI API:    {'SET ✓' if Config.OPENAI_API_KEY    else 'NOT SET - no image gen'}")
     print("URL: http://localhost:5000")
     print("=" * 50)
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    app.run(debug=True, use_reloader=False, port=5000, host='0.0.0.0')
