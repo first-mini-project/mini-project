@@ -679,12 +679,13 @@
 <!-- 스토리 데이터 (JSON) -->
 <script id="story-data" type="application/json">
 {
-  "title":     {{ story.title   | tojson }},
-  "content":   {{ story.content | tojson }},
-  "moral":     {{ story.moral   | tojson }},
-  "keywords":  {{ story.keywords | tojson }},
+  "title":      {{ story.title   | tojson }},
+  "content":    {{ story.content | tojson }},
+  "moral":      {{ story.moral   | tojson }},
+  "keywords":   {{ story.keywords | tojson }},
   "scene_data": {{ story.scene_data | tojson }},
-  "drawings":  {{ drawings | tojson }}
+  "layout_data": {{ story.layout_data | tojson }},
+  "drawings":   {{ drawings | tojson }}
 }
 </script>
 {% endblock %}

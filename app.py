@@ -96,6 +96,19 @@ def collection():
 def library():
     """내 동화 도서관"""
     stories = db.get_all_stories()
+    # 각 스토리의 그림 데이터도 함께 주입 (도서관 뷰어에서 누끼 그림 표시용)
+    for story in stories:
+        try:
+            drawing_ids = story.get('drawing_ids', [])
+            drawings = db.get_drawings_by_ids(drawing_ids) if drawing_ids else []
+            # file_path, korean, emoji 만 포함 (image_data는 용량이 커서 제외)
+            story['drawings'] = [
+                {'id': d['id'], 'korean': d['korean'], 'emoji': d.get('emoji', ''),
+                 'file_path': d.get('file_path', '')}
+                for d in drawings if d
+            ]
+        except Exception:
+            story['drawings'] = []
     return render_template('library.html', stories=stories)
 
 
@@ -218,7 +231,57 @@ def api_generate_story():
         full_text = f"{story_data['title']}. {story_data['content']} {story_data.get('moral', '')}"
         audio_path = tts_service.generate_tts(full_text, slow=False)
 
-        # 5. DB 저장
+        # 5. layout_data 생성 (정확한 스프레드 배치 저장)
+        scenes = story_data.get('scene_data', [])
+        num_content = max(len(drawings), len(scenes)) if scenes else len(drawings)
+        
+        # 각 장면에 배치된 그림들 결정 (중복 제거하고 장면 텍스트 매칭)
+        def find_mentioned_drawings(scene_text, all_drawings):
+            """장면 텍스트에 언급된 그림들을 반환"""
+            text = scene_text or ''
+            result = []
+            for d in all_drawings:
+                if d.get('korean') and d['korean'] in text:
+                    result.append(d['id'])
+            return result
+        
+        layout_spreads = []
+        
+        # 표지
+        cover_drawing_id = drawings[0]['id'] if drawings else None
+        layout_spreads.append({
+            'type': 'cover',
+            'drawingId': cover_drawing_id,
+            'sceneIdx': 0
+        })
+        
+        # 동화 내용 스프레드
+        for i in range(num_content):
+            scene = scenes[i] if scenes and i < len(scenes) else None
+            mentioned_ids = []
+            if scene and scene.get('text'):
+                mentioned_ids = find_mentioned_drawings(scene['text'], drawings)
+            
+            primary_id = mentioned_ids[0] if len(mentioned_ids) > 0 else None
+            secondary_id = mentioned_ids[1] if len(mentioned_ids) > 1 else None
+            
+            layout_spreads.append({
+                'type': 'content',
+                'sceneIdx': i,
+                'primaryDrawingId': primary_id,
+                'secondaryDrawingId': secondary_id,
+                'textPageNum': i + 1
+            })
+        
+        # 교훈 페이지
+        layout_spreads.append({'type': 'moral'})
+        
+        # 종료 페이지
+        layout_spreads.append({'type': 'end'})
+        
+        layout_data = {'spreads': layout_spreads}
+
+        # 6. DB 저장
         story_id = db.save_story(
             title=story_data['title'],
             content=story_data['content'],
@@ -227,7 +290,8 @@ def api_generate_story():
             drawing_ids=[d['id'] for d in drawings],
             illustration_path=illustration_path,
             audio_path=audio_path,
-            scene_data=story_data.get('scene_data')
+            scene_data=story_data.get('scene_data'),
+            layout_data=layout_data
         )
 
         return jsonify({'success': True, 'story_id': story_id})
