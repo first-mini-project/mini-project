@@ -84,6 +84,17 @@
 
     <div class="toolbar-divider"></div>
 
+    <div class="toolbar-group">
+      <span class="toolbar-label">✨ 특별 도구</span>
+      <div class="toolbar-specials">
+        <button class="special-btn locked" id="rainbow-btn" title="무지개 펜" data-unlock="11">🌈 <span>무지개</span> <i class="lock-icon">🔒</i></button>
+        <button class="special-btn locked" id="sparkle-btn" title="반짝이 브러시" data-unlock="21">✨ <span>반짝이</span> <i class="lock-icon">🔒</i></button>
+        <button class="special-btn locked" id="stamp-btn" title="황금 스탬프" data-unlock="31">👑 <span>스탬프</span> <i class="lock-icon">🔒</i></button>
+      </div>
+    </div>
+
+    <div class="toolbar-divider"></div>
+
     <div class="toolbar-group toolbar-actions">
       <button class="toolbar-btn" id="eraser-btn" title="지우개">🧹 지우개</button>
       <button class="toolbar-btn" id="undo-btn" title="되돌리기">↩️ 되돌리기</button>
@@ -121,7 +132,18 @@
     <h2 class="praise-title">정말 잘 그렸어요!</h2>
     <p class="praise-sub">{{ word.emoji }} {{ word.korean }} 그림이 모음장에 저장됐어요!</p>
     <div class="praise-stars">⭐⭐⭐</div>
-    <p class="praise-redirect">잠시 후 그림 모음장으로 이동해요...</p>
+    <p praise-redirect>잠시 후 그림 모음장으로 이동해요...</p>
+  </div>
+</div>
+
+<!-- ── 레벨업 모달 ── -->
+<div class="level-up-modal" id="level-up-modal">
+  <div class="level-up-box">
+    <span class="level-up-badge" id="level-up-badge">🌱</span>
+    <h2 class="level-up-title" id="level-up-title">레벨 업!</h2>
+    <p class="level-up-msg" id="level-up-msg">새로운 작가 등급을 획득했어요!</p>
+    <div class="level-up-unlocked" id="level-up-unlocked">🔓 새로운 도구가 열렸어요!</div>
+    <button class="btn btn-purple" onclick="document.getElementById('level-up-modal').classList.remove('show')">확정</button>
   </div>
 </div>
 

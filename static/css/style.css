@@ -1002,3 +1002,122 @@ audio { width: 100%; border-radius: 8px; }
   pointer-events: none;
 }
 .toast.show { opacity: 1; }
+/* ─── 특별 도구 & 뱃지 시스템 ─── */
+.toolbar-specials {
+  display: flex;
+  gap: 8px;
+}
+.special-btn {
+  background: #fff;
+  border: 2px solid #eee;
+  border-radius: 12px;
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  font-family: 'Jua', sans-serif;
+  position: relative;
+}
+.special-btn:hover:not(.locked) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-color: var(--yellow);
+}
+.special-btn.active {
+  background: var(--yellow);
+  border-color: #e6c200;
+}
+.special-btn.locked {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #f0f0f0;
+  color: #999;
+}
+.lock-icon {
+  font-style: normal;
+  font-size: 0.8rem;
+}
+.special-btn:not(.locked) .lock-icon {
+  display: none;
+}
+
+/* 레벨업 모달 전용 */
+.level-up-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(5px);
+}
+.level-up-modal.show { display: flex; }
+.level-up-box {
+  background: #fff;
+  border-radius: 30px;
+  padding: 40px;
+  text-align: center;
+  max-width: 450px;
+  width: 90%;
+  box-shadow: 0 20px 80px rgba(0,0,0,0.3);
+  animation: levelUpPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+@keyframes levelUpPop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.level-up-badge {
+  font-size: 6rem;
+  margin-bottom: 20px;
+  display: block;
+}
+.level-up-title {
+  font-size: 2.2rem;
+  color: var(--purple);
+  margin-bottom: 10px;
+}
+.level-up-msg {
+  font-size: 1.1rem;
+  color: #555;
+  margin-bottom: 24px;
+}
+.level-up-unlocked {
+  background: #f9f0ff;
+  border-radius: 15px;
+  padding: 15px;
+  margin-bottom: 24px;
+  color: #8b5cf6;
+  font-weight: bold;
+}
+
+/* 스케치북 배경 (동화책 뷰어) */
+.scene-sky.sketchbook {
+  background-image: url('/static/images/sketchbook.png') !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  opacity: 1 !important;
+}
+
+/* 정중앙 배치 (동화책 뷰어) */
+.drawing-stage.center-stage {
+  position: absolute;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  bottom: auto !important;
+  right: auto !important;
+}
+
+/* 무지개 펜 효과 애니메이션 */
+@keyframes rainbowGlow {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+.rainbow-active {
+  animation: rainbowGlow 2s linear infinite;
+}

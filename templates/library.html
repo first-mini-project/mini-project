@@ -9,7 +9,11 @@
 <!-- Server Injected Data -->
 <script>
   window.SERVER_DATA = {
-    stories: {{ stories | tojson | safe }}
+    stories: {{ stories | tojson | safe }},
+    user: {
+      total_books: {{ total_books | default(0) }},
+      badge: "{{ badge | default('🌱 새싹 작가') }}"
+    }
   };
 </script>
 {% endblock %}

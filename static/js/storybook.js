@@ -337,7 +337,11 @@
       </div>`;
     }
 
-    function makeMoralLeftHTML() {
+    function makeMoralLeftHTML(spec) {
+      if (spec && spec.mergedMoralImage) {
+        return `<div class="scene-sky sketchbook">${bgImgTag({merged_image: spec.mergedMoralImage})}</div>
+                <div class="scene-vignette"></div>`;
+      }
       return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;
                            padding:28px 20px;height:100%;box-sizing:border-box;
                            background:linear-gradient(145deg,#fffde7,#fff9c4);
@@ -379,7 +383,7 @@
             rightInnerHTML: `<p class="story-text">${text}</p>`,
           });
         } else if (spec.type === 'moral') {
-          pages.push({ leftHTML: makeMoralLeftHTML(), rightInnerHTML: makeEndRightHTML() });
+          pages.push({ leftHTML: makeMoralLeftHTML(spec), rightInnerHTML: makeEndRightHTML() });
         }
         // 'end' type은 moral에서 처리됨
       }
