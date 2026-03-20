@@ -24,8 +24,12 @@
   {% if drawings %}
   <div class="drawings-grid">
     {% for drawing in drawings %}
-    <div class="drawing-card fade-in" data-id="{{ drawing.id }}" style="animation-delay: {{ loop.index0 * 0.05 }}">
+    <div class="drawing-card fade-in" data-id="{{ drawing.id }}" data-word-id="{{ drawing.word_id }}" style="animation-delay: {{ loop.index0 * 0.05 }}">
       <div class="selected-badge">✓</div>
+      <div class="card-actions">
+        <a href="/draw/{{ drawing.word_id }}" class="card-action-btn edit-btn" title="다시 그리기">✏️</a>
+        <button class="card-action-btn delete-btn" data-id="{{ drawing.id }}" title="삭제">🗑️</button>
+      </div>
       {% if drawing.file_path %}
       <img src="{{ url_for('static', filename=drawing.file_path.replace('static/', '')) }}" alt="{{ drawing.korean }}"
         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">

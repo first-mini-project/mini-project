@@ -94,13 +94,19 @@
 
   <!-- ── 그림판 (캔버스) ── -->
   <div id="canvas-container" class="canvas-container fade-in">
-    <canvas id="drawing-canvas"></canvas>
+    <canvas id="drawing-canvas"
+      {% if existing_drawing %}
+        data-existing-image="{{ url_for('static', filename=existing_drawing.file_path.replace('static/', '')) }}"
+        data-existing-id="{{ existing_drawing.id }}"
+      {% endif %}
+    ></canvas>
   </div>
 
   <!-- ── 하단 완료 버튼 ── -->
   <div class="drawing-bottom fade-in">
-    <a href="/main" class="btn btn-white">← 메인으로</a>
-    <button class="btn btn-green btn-done" id="save-btn" data-word-id="{{ word.id }}">
+    <a href="/collection" class="btn btn-white">← 모음장으로</a>
+    <button class="btn btn-green btn-done" id="save-btn" data-word-id="{{ word.id }}"
+      {% if existing_drawing %}data-replace-id="{{ existing_drawing.id }}"{% endif %}>
       ✅ 다 그렸어요!
     </button>
   </div>
