@@ -25,21 +25,21 @@ def _get_pipe():
             _pipe_load_failed = True
             return None
 
-        # VRAM 여유 확인 (4GB 이상 필요)
+        # VRAM 여유 확인 (1.5GB 이상 필요 — sd-turbo는 약 2GB)
         free_vram = torch.cuda.mem_get_info()[0] / (1024**3)  # GB 단위
-        if free_vram < 4.0:
+        if free_vram < 1.5:
             print(f"[로컬 SD] VRAM 여유 부족 ({free_vram:.1f}GB) → Pollinations.ai 폴백 모드로 전환")
             _pipe_load_failed = True
             return None
 
         from diffusers import AutoPipelineForText2Image
-        print("[로컬 SD] 모델 로딩 중 (최초 1회)...")
+        print("[로컬 SD] sd-turbo 모델 로딩 중 (최초 1회, 약 2GB)...")
         _pipe = AutoPipelineForText2Image.from_pretrained(
-            'stabilityai/sdxl-turbo',
+            'stabilityai/sd-turbo',   # sdxl-turbo(6GB) → sd-turbo(2GB)
             torch_dtype=torch.float16,
-            variant='fp16',
         ).to('cuda')
-        print("[로컬 SD] 모델 로딩 완료!")
+        _pipe.enable_attention_slicing()  # VRAM 추가 절약
+        print("[로컬 SD] sd-turbo 로딩 완료!")
     except Exception as e:
         print(f"[로컬 SD] 로딩 실패: {e} → Pollinations.ai 폴백 모드로 전환")
         _pipe_load_failed = True
