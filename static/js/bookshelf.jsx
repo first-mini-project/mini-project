@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -202,51 +202,127 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   const currentPage = book.pages[currentPageIndex] || {};
   const currentPageContent = currentPage.content_kr || '';
 
-  // 현재 장면에 배치할 그림 결정 (storybook.js 의 mapToScenes 로직과 동일)
   const drawings = book.drawings || [];
-  const hit = mentionedInScene(currentPage.content_kr, drawings);
-  // 언급된 그림이 없으면 페이지 인덱스 기반으로 순환 배치 (항상 그림 표시)
-  const primaryDrawing   = hit[0] || (drawings.length > 0 ? drawings[currentPageIndex % drawings.length] : null);
-  const secondaryDrawing = hit[1] || (drawings.length > 1 ? drawings[(currentPageIndex + 1) % drawings.length] : null);
 
   function getDrawingSrc(d) {
     if (!d) return null;
     return nukkiMap[d.id] || (d.file_path ? '/' + d.file_path.replace(/^\/+/, '') : null);
   }
 
-  function bgImgTag(scene) {
-    if (scene && (scene.merged_image || scene.mergedMoralImage)) {
-      const src = scene.merged_image || scene.mergedMoralImage;
-      return `<img src="/${src.replace(/^\/+/, '')}" style="width:100%; height:100%; object-fit:cover; display:block;" alt="배경">`;
+  // 모든 페이지 그림 배치 사전 계산 (내용 우선, 미노출 그림 분배 → 최소 1회 보장, 최대 3개)
+  const pageAssignments = useMemo(() => {
+    const shownIds = new Set();
+    const result = book.pages.map(page => {
+      if (page.type !== 'content') return { primary: null, secondary: null, tertiary: null };
+      let primary = null, secondary = null, tertiary = null;
+      if (page.primaryDrawingId) primary = drawings.find(d => d.id === page.primaryDrawingId) || null;
+      if (page.secondaryDrawingId) secondary = drawings.find(d => d.id === page.secondaryDrawingId) || null;
+      if (!primary && !secondary) {
+        const hit = mentionedInScene(page.content_kr, drawings);
+        primary = hit[0] || null;
+        secondary = hit[1] || null;
+        tertiary = hit[2] || null;
+      }
+      if (primary) shownIds.add(primary.id);
+      if (secondary) shownIds.add(secondary.id);
+      if (tertiary) shownIds.add(tertiary.id);
+      return { primary, secondary, tertiary };
+    });
+    // 미노출 그림을 빈 슬롯에 분배
+    const unshown = drawings.filter(d => !shownIds.has(d.id));
+    for (const d of unshown) {
+      let placed = false;
+      for (let i = 0; i < result.length; i++) {
+        if (book.pages[i].type !== 'content') continue;
+        if (!result[i].secondary) { result[i].secondary = d; placed = true; break; }
+      }
+      if (!placed) {
+        for (let i = 0; i < result.length; i++) {
+          if (book.pages[i].type !== 'content') continue;
+          if (!result[i].tertiary) { result[i].tertiary = d; placed = true; break; }
+        }
+      }
+      if (!placed) {
+        for (let i = 0; i < result.length; i++) {
+          if (book.pages[i].type !== 'content') continue;
+          if (!result[i].primary) { result[i].primary = d; break; }
+        }
+      }
     }
-    return '';
-  }
+    return result;
+  }, [book.id]);
 
-  function renderDrawing(d, style) {
-    const src = getDrawingSrc(d);
-    if (!src) return null;
-    return (
-      <img
-        src={src}
-        alt={d.korean || ''}
-        style={{ position: 'absolute', maxWidth: '60%', maxHeight: '60%', objectFit: 'contain', ...style }}
-      />
-    );
-  }
-
-  // 왼쪽 페이지: 배경 + 누끼 그림 합성
+  // 왼쪽 페이지: 배경 + 그림 (교훈 페이지: 스케치북 배경 + 모든 그림, 내용 페이지: 배치된 1-2개)
   function renderLeftPage() {
+    const isMoralPage = currentPage.type === 'moral';
+
+    // ── 교훈(마지막) 페이지 ──────────────────────────────────────────────
+    if (isMoralPage) {
+      const dc = drawings.length;
+      const cols = dc === 1 ? 1 : 2;
+      const rows = dc <= 2 ? 1 : dc <= 4 ? 2 : 3;
+      const rotations = [-5, 4, -3, 6, -4];
+      return (
+        <div style={{ position:'relative', width:'100%', height:'100%', overflow:'hidden',
+                      borderRadius:'10px 0 0 10px', background:'linear-gradient(145deg,#fffde7,#fff9c4)' }}>
+          <img src="/static/images/sketchbook.png" alt="스케치북"
+            onLoad={e => { e.target.style.opacity='1'; }}
+            onError={e => { e.target.style.display='none'; }}
+            style={{ position:'absolute', inset:0, width:'100%', height:'100%',
+                     objectFit:'fill', zIndex:1, opacity:0, transition:'opacity 0.4s' }} />
+          <div style={{
+            position:'absolute', top:'20%', left:'8%', right:'8%', bottom:'18%', zIndex:3,
+            display:'grid',
+            gridTemplateColumns:`repeat(${cols}, 1fr)`,
+            gridTemplateRows:`repeat(${rows}, 1fr)`,
+            gap:'8px', boxSizing:'border-box', overflow:'hidden',
+          }}>
+            {drawings.map((d, i) => {
+              const src = getDrawingSrc(d);
+              const rot = rotations[i % rotations.length];
+              const spansAll = (dc % 2 !== 0) && (i === dc - 1) && dc > 1;
+              return (
+                <div key={d.id} style={{
+                  gridColumn: spansAll ? '1 / -1' : undefined,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  overflow:'hidden',
+                  animation:`float-anim ${3 + i * 0.5}s ease-in-out ${i * 0.4}s infinite`,
+                }}>
+                  {src && <img src={src} alt={d.korean||''}
+                    style={{ maxWidth:'70%', maxHeight:'70%', objectFit:'contain',
+                             transform:`rotate(${rot}deg)`,
+                             filter:'drop-shadow(0 4px 12px rgba(0,0,0,0.28))' }} />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ── 내용 페이지: 배치된 1-3개 그림 플로팅 ───────────────────────────
+    const { primary, secondary, tertiary } = pageAssignments[currentPageIndex] || {};
+    const pageDrawings = [primary, secondary, tertiary].filter(Boolean);
+    const dc = pageDrawings.length;
+    const maxH = dc === 1 ? '70vh' : dc === 2 ? '58vh' : '48vh';
+    const maxW = dc === 1 ? '90%' : dc === 2 ? '78%' : '65%';
+    // 그림 수에 따라 페이지 내 절대 위치 (top/left는 중심 기준, translate로 보정)
+    const POSITIONS = [
+      [{ top: '50%', left: '50%' }],
+      [{ top: '35%', left: '28%' }, { top: '62%', left: '72%' }],
+      [{ top: '25%', left: '50%' }, { top: '65%', left: '22%' }, { top: '68%', left: '76%' }],
+    ];
+    const positions = POSITIONS[Math.min(dc, 3) - 1] || POSITIONS[0];
+
     const bgImage = currentPage.bgImage;
     const bgText  = currentPage.bgText || '';
-    const mergedImage = currentPage.mergedImage || currentPage.mergedMoralImage;
-
-    // storybook.js 와 동일: 서버 저장 파일 우선 → Pollinations.ai 폴백
+    const mergedImage = currentPage.mergedImage;
     let bgSrc = null;
-    if (mergedImage) {
-        bgSrc = '/' + mergedImage.replace(new RegExp('^/+'), '');
-    } else if (bgImage) {
-        bgSrc = '/' + bgImage.replace(new RegExp('^/+'), '');
-    } else if (currentPage.type !== 'moral' && bgText) {
+    if (bgImage) {
+      bgSrc = '/' + bgImage.replace(/^\/+/, '');
+    } else if (mergedImage) {
+      bgSrc = '/' + mergedImage.replace(/^\/+/, '');
+    } else if (bgText) {
       const prompt = bgText
         + ', children storybook illustration, watercolor art style, soft pastel colors,'
         + ' magical whimsical background scenery, no characters, no people, no animals, no text';
@@ -255,53 +331,36 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
     }
 
     return (
-      <div style={{
-        position: 'relative', width: '100%', height: '100%',
-        overflow: 'hidden', borderRadius: '10px 0 0 10px',
-        display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}>
-        {/* 배경 — 로딩 중 스피너 표시 */}
+      <div style={{ position:'relative', width:'100%', height:'100%',
+                    overflow:'hidden', borderRadius:'10px 0 0 10px' }}>
         {bgSrc ? (
           <>
-            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center',
-              background:'linear-gradient(to bottom, #87ceeb, #5cbf8a)', zIndex:0 }}>
-              <span style={{ fontSize:'2rem', opacity:0.7 }}>🎨</span>
-            </div>
+            <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, #87ceeb, #5cbf8a)', zIndex:0 }} />
             <img src={bgSrc} alt="배경"
               onLoad={e => { e.target.style.opacity='1'; }}
               onError={e => { e.target.style.display='none'; }}
-              style={{ width:'100%', height:'100%', objectFit:'cover', display:'block',
-                       position:'relative', zIndex:1, opacity:0, transition:'opacity 0.4s' }} />
+              style={{ position:'absolute', inset:0, width:'100%', height:'100%',
+                       objectFit:'cover', display:'block', zIndex:1, opacity:0, transition:'opacity 0.4s' }} />
           </>
         ) : (
-          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(to bottom, #87ceeb, #5cbf8a)' }} />
+          <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, #87ceeb, #5cbf8a)' }} />
         )}
-
-        {/* 그림 합성 — storybook.js 와 동일한 배치 규칙 적용 */}
-        {!mergedImage && primaryDrawing && !secondaryDrawing && (
-          isSky(primaryDrawing)
-            ? renderDrawing(primaryDrawing, { top: '8%', left: '50%', transform: 'translateX(-50%)' })
-            : renderDrawing(primaryDrawing, { bottom: '5%', left: '50%', transform: 'translateX(-50%)' })
-        )}
-        {!mergedImage && primaryDrawing && secondaryDrawing && (() => {
-          const pSky = isSky(primaryDrawing), sSky = isSky(secondaryDrawing);
-          if (!pSky && sSky) return (<>
-            {renderDrawing(primaryDrawing, { bottom: '5%', left: '20%' })}
-            {renderDrawing(secondaryDrawing, { top: '8%', right: '15%' })}
-          </>);
-          if (pSky && !sSky) return (<>
-            {renderDrawing(secondaryDrawing, { bottom: '5%', left: '20%' })}
-            {renderDrawing(primaryDrawing, { top: '8%', right: '15%' })}
-          </>);
-          if (!pSky && !sSky) return (<>
-            {renderDrawing(primaryDrawing, { bottom: '5%', left: '15%', maxWidth: '50%' })}
-            {renderDrawing(secondaryDrawing, { bottom: '5%', right: '10%', maxWidth: '38%' })}
-          </>);
-          return (<>
-            {renderDrawing(primaryDrawing, { top: '8%', left: '15%' })}
-            {renderDrawing(secondaryDrawing, { top: '8%', right: '15%' })}
-          </>);
-        })()}
+        {pageDrawings.map((d, i) => {
+          const src = getDrawingSrc(d);
+          if (!src) return null;
+          const pos = positions[i] || positions[0];
+          return (
+            <div key={d.id} style={{
+              position:'absolute', top: pos.top, left: pos.left,
+              transform:'translate(-50%, -50%)', zIndex:5,
+              animation:`float-anim ${3 + i * 0.7}s ease-in-out ${i * 0.5}s infinite`,
+            }}>
+              <img src={src} alt={d.korean||''}
+                style={{ maxHeight:maxH, maxWidth:maxW, objectFit:'contain',
+                         filter:'drop-shadow(0 4px 14px rgba(0,0,0,0.35))' }} />
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -521,7 +580,9 @@ function BookshelfApp() {
                 content_kr: scene ? scene.text : '',
                 bgImage: scene ? scene.bg_image : null,
                 bgText: (scene && scene.bg) || '',
-                mergedImage: spread.mergedImage
+                mergedImage: spread.mergedImage,
+                primaryDrawingId: spread.primaryDrawingId || null,
+                secondaryDrawingId: spread.secondaryDrawingId || null,
               });
             } else if (spread.type === 'moral') {
               mappedPages.push({

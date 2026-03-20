@@ -149,39 +149,6 @@ def generate_moral_collage(moral_text, all_drawings):
             
             bg_img.alpha_composite(d_img, (px, py))
             
-        # 텍스트 렌더링
-        from PIL import ImageDraw, ImageFont
-        draw = ImageDraw.Draw(bg_img)
-        # '맑은고딕볼드' 폰트 시도
-        font_path = "C:\\Windows\\Fonts\\malgunbd.ttf"
-        try:
-            title_font = ImageFont.truetype(font_path, 36)
-            body_font = ImageFont.truetype(font_path, 24)
-        except:
-            title_font = ImageFont.load_default()
-            body_font = ImageFont.load_default()
-
-        # 제목 (PIL은 이모지 렌더링 불가 → 텍스트 별표 기호 사용)
-        draw.text((bg_w//2, int(bg_h * 0.65)), "★ 이야기의 교훈 ★", fill=(60, 60, 60, 255), font=title_font, anchor="mm")
-        
-        # 교훈 내용 (자동 줄바꿈)
-        lines = []
-        words = moral_text.split()
-        current_line = ""
-        for word in words:
-            test_line = current_line + " " + word
-            if draw.textbbox((0, 0), test_line, font=body_font)[2] < bg_w - 80:
-                current_line = test_line
-            else:
-                lines.append(current_line.strip())
-                current_line = word
-        lines.append(current_line.strip())
-        
-        y_text = int(bg_h * 0.73)
-        for line in lines:
-            draw.text((bg_w//2, y_text), line, fill=(80, 80, 80, 255), font=body_font, anchor="mm")
-            y_text += 28
-
         # 저장
         merged_filename = f"moral_{uuid.uuid4().hex[:8]}.jpg"
         merged_filepath = os.path.join(Config.MERGED_DIR, merged_filename)
