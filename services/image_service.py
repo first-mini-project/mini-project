@@ -307,6 +307,15 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
     return scene_data
 
 
+def _check_cuda_available():
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
+
 def generate_reference_image(korean_word: str, english_word: str, image_prompt: str = None) -> str | None:
     """
     아이가 그림 그릴 때 보여줄 참고 이미지를 기존 HF 단일 API에서 
