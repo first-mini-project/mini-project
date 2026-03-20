@@ -15,6 +15,16 @@ WORDS_SEED = [
     {"korean": "물고기", "english": "fish", "emoji": "🐟", "category": "동물"},
     {"korean": "펭귄", "english": "penguin", "emoji": "🐧", "category": "동물"},
     {"korean": "원숭이", "english": "monkey", "emoji": "🐒", "category": "동물"},
+    {"korean": "돼지", "english": "pig", "emoji": "🐷", "category": "동물"},
+    {"korean": "소", "english": "cow", "emoji": "🐮", "category": "동물"},
+    {"korean": "말", "english": "horse", "emoji": "🐴", "category": "동물"},
+    {"korean": "오리", "english": "duck", "emoji": "🦆", "category": "동물"},
+    {"korean": "거북이", "english": "turtle", "emoji": "🐢", "category": "동물"},
+    {"korean": "새", "english": "bird", "emoji": "🐦", "category": "동물"},
+    {"korean": "개구리", "english": "frog", "emoji": "🐸", "category": "동물"},
+    {"korean": "호랑이", "english": "tiger", "emoji": "🐯", "category": "동물"},
+    {"korean": "기린", "english": "giraffe", "emoji": "🦒", "category": "동물"},
+    {"korean": "여우", "english": "fox", "emoji": "🦊", "category": "동물"},
     # 자연
     {"korean": "나무", "english": "tree", "emoji": "🌳", "category": "자연"},
     {"korean": "꽃", "english": "flower", "emoji": "🌸", "category": "자연"},
@@ -25,6 +35,9 @@ WORDS_SEED = [
     {"korean": "구름", "english": "cloud", "emoji": "☁️", "category": "자연"},
     {"korean": "산", "english": "mountain", "emoji": "⛰️", "category": "자연"},
     {"korean": "바다", "english": "ocean", "emoji": "🌊", "category": "자연"},
+    {"korean": "눈사람", "english": "snowman", "emoji": "⛄", "category": "자연"},
+    {"korean": "번개", "english": "lightning", "emoji": "⚡", "category": "자연"},
+    {"korean": "비", "english": "rain", "emoji": "🌧️", "category": "자연"},
     # 사물/판타지
     {"korean": "집", "english": "house", "emoji": "🏠", "category": "사물"},
     {"korean": "성", "english": "castle", "emoji": "🏰", "category": "사물"},
@@ -33,7 +46,14 @@ WORDS_SEED = [
     {"korean": "풍선", "english": "balloon", "emoji": "🎈", "category": "사물"},
     {"korean": "케이크", "english": "cake", "emoji": "🎂", "category": "사물"},
     {"korean": "왕관", "english": "crown", "emoji": "👑", "category": "사물"},
-    {"korean": "마법지팡이", "english": "magic wand", "emoji": "🪄", "category": "사물"},
+    {"korean": "로봇", "english": "robot", "emoji": "🤖", "category": "사물"},
+    {"korean": "자전거", "english": "bicycle", "emoji": "🚲", "category": "사물"},
+    {"korean": "비행기", "english": "airplane", "emoji": "✈️", "category": "사물"},
+    {"korean": "배", "english": "boat", "emoji": "⛵", "category": "사물"},
+    {"korean": "우주선", "english": "spaceship", "emoji": "🚀", "category": "사물"},
+    {"korean": "외계인", "english": "alien", "emoji": "👽", "category": "사물"},
+    {"korean": "안경", "english": "glasses", "emoji": "👓", "category": "사물"},
+    {"korean": "모자", "english": "hat", "emoji": "🧢", "category": "사물"},
     # 음식
     {"korean": "사과", "english": "apple", "emoji": "🍎", "category": "음식"},
     {"korean": "딸기", "english": "strawberry", "emoji": "🍓", "category": "음식"},
@@ -42,6 +62,13 @@ WORDS_SEED = [
     {"korean": "포도", "english": "grapes", "emoji": "🍇", "category": "음식"},
     {"korean": "당근", "english": "carrot", "emoji": "🥕", "category": "음식"},
     {"korean": "아이스크림", "english": "ice cream", "emoji": "🍦", "category": "음식"},
+    {"korean": "피자", "english": "pizza", "emoji": "🍕", "category": "음식"},
+    {"korean": "햄버거", "english": "hamburger", "emoji": "🍔", "category": "음식"},
+    {"korean": "도넛", "english": "donut", "emoji": "🍩", "category": "음식"},
+    {"korean": "사탕", "english": "candy", "emoji": "🍬", "category": "음식"},
+    {"korean": "초콜릿", "english": "chocolate", "emoji": "🍫", "category": "음식"},
+    {"korean": "빵", "english": "bread", "emoji": "🍞", "category": "음식"},
+    {"korean": "치즈", "english": "cheese", "emoji": "🧀", "category": "음식"},
 ]
 
 
@@ -92,9 +119,9 @@ def init_db():
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
         ''')
-        count = conn.execute('SELECT COUNT(*) FROM words').fetchone()[0]
-        if count == 0:
-            for word in WORDS_SEED:
+        existing_words = {row['korean'] for row in conn.execute('SELECT korean FROM words')}
+        for word in WORDS_SEED:
+            if word['korean'] not in existing_words:
                 conn.execute(
                     'INSERT INTO words (korean, english, emoji, category) VALUES (?, ?, ?, ?)',
                     (word['korean'], word['english'], word['emoji'], word['category'])
