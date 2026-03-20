@@ -67,21 +67,22 @@
   };
 
   const KW_THEME = {
-    '별':'space','달':'moon','우주':'space',
-    '바다':'ocean','물고기':'ocean','펭귄':'ice',
-    '나무':'forest','숲':'forest','곰':'forest',
+    '별':'space','달':'moon','우주':'space','우주선':'space','외계인':'space','로봇':'space',
+    '바다':'ocean','물고기':'ocean','펭귄':'ice','거북이':'ocean','오리':'ocean','배':'ocean',
+    '나무':'forest','숲':'forest','곰':'forest','여우':'forest','새':'forest','개구리':'forest',
     '꽃':'flower','나비':'flower','딸기':'flower',
-    '구름':'cloudkingdom',
+    '구름':'cloudkingdom','번개':'cloudkingdom','비':'ocean',
     '하늘':'meadow','무지개':'meadow','태양':'meadow',
     '산':'meadow','기차':'meadow','자동차':'meadow',
     '집':'meadow','토끼':'meadow','고양이':'meadow',
     '강아지':'meadow','풍선':'meadow',
-    '눈':'ice',
+    '눈':'ice','눈사람':'ice',
     '성':'castle','왕관':'castle','마법지팡이':'castle',
-    '케이크':'candy','아이스크림':'candy',
+    '케이크':'candy','아이스크림':'candy','도넛':'candy','사탕':'candy','초콜릿':'candy',
     '사과':'meadow','수박':'meadow','바나나':'jungle',
     '포도':'meadow','당근':'meadow',
-    '사자':'jungle','코끼리':'jungle','원숭이':'jungle',
+    '사자':'jungle','코끼리':'jungle','원숭이':'jungle','호랑이':'jungle','기린':'jungle',
+    '돼지':'meadow','소':'meadow','말':'meadow','돌':'meadow','자전거':'meadow','안경':'meadow','모자':'meadow','피자':'meadow','햄버거':'meadow','빵':'meadow','치즈':'meadow',
   };
 
   function getTheme(bgText, kwList) {
@@ -171,7 +172,7 @@
   // ═══════════════════════════════════════════════════════════════════════
   // 4. 그림 배치 로직
   // ═══════════════════════════════════════════════════════════════════════
-  const SKY_KW = new Set(['별', '달', '구름', '무지개', '태양', '나비', '풍선']);
+  const SKY_KW = new Set(['별', '달', '구름', '무지개', '태양', '나비', '풍선', '새', '비행기', '우주선', '번개', '비']);
 
   function isSky(d) { return d && SKY_KW.has(d.korean); }
 

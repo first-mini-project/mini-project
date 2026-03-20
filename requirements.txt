@@ -6,9 +6,12 @@ gtts>=2.5.1
 requests>=2.32.3
 python-dotenv>=1.0.1
 Pillow>=10.4.0
-# 로컬 이미지 생성 (SDXL-Turbo) — GPU 필요
+# 로컬 이미지 생성 (SD-Turbo FP16) — GPU 필요
 # torch는 CUDA 버전으로 별도 설치:
 # pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 diffusers>=0.37.0
 transformers>=4.0.0
 accelerate>=0.20.0
+bitsandbytes>=0.41.0
+torch-tensorrt>=2.0.0
+peft>=0.7.0

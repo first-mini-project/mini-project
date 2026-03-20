@@ -148,7 +148,7 @@ def generate_moral_collage(moral_text, all_drawings):
             py = random.randint(40, int(bg_h * 0.55) - d_img.height)
             
             bg_img.alpha_composite(d_img, (px, py))
-
+            
         # 텍스트 렌더링
         from PIL import ImageDraw, ImageFont
         draw = ImageDraw.Draw(bg_img)
@@ -193,7 +193,7 @@ def generate_moral_collage(moral_text, all_drawings):
         print(f"[Moral Collage Error] {e}")
         return None
 
-# ─── 로컬 SDXL-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
+# ─── 로컬 SD-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
 _pipe = None
 _pipe_load_failed = False   # 한번 실패하면 재시도 안 함 (앱 재시작까지)
 
@@ -217,14 +217,36 @@ def _get_pipe():
             _pipe_load_failed = True
             return None
 
-        from diffusers import AutoPipelineForText2Image
-        print("[로컬 SD] sd-turbo 모델 로딩 중 (최초 1회, 약 2GB)...")
+        from diffusers import AutoPipelineForText2Image, EulerAncestralDiscreteScheduler
+        print("[로컬 SD] SD-Turbo (FP16) 파이프라인 로딩 중...")
+        
+        # SD-Turbo 파이프라인 로드 (SDXL보다 가볍고 빠름)
         _pipe = AutoPipelineForText2Image.from_pretrained(
-            'stabilityai/sd-turbo',   # sdxl-turbo(6GB) → sd-turbo(2GB)
+            'stabilityai/sd-turbo',
             torch_dtype=torch.float16,
-        ).to('cuda')
-        _pipe.enable_attention_slicing()  # VRAM 추가 절약
-        print("[로컬 SD] sd-turbo 로딩 완료!")
+            variant='fp16'
+        ).to("cuda")
+        
+        # 스케줄러 설정
+        _pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(_pipe.scheduler.config)
+
+        # VRAM 효율화
+        try:
+            _pipe.enable_xformers_memory_efficient_attention()
+        except:
+            _pipe.enable_attention_slicing()
+
+        # TensorRT 기반 컴파일 적용 (선택 사항)
+        try:
+            import torch_tensorrt
+            print("[로컬 SD] TensorRT 엔진 컴파일 시도...")
+            _pipe.unet = torch.compile(_pipe.unet, mode="reduce-overhead", backend="tensorrt")
+            print("[로컬 SD] TensorRT 컴파일 완료!")
+        except Exception as compile_err:
+            print(f"[로컬 SD] TensorRT 컴파일 생략: {compile_err}")
+
+        print("[로컬 SD] SD-Turbo 로딩 완료!")
+
     except Exception as e:
         print(f"[로컬 SD] 로딩 실패: {e} → Pollinations.ai 폴백 모드로 전환")
         _pipe_load_failed = True
@@ -269,7 +291,7 @@ def _generate_bg_pollinations(bg_text: str) -> str | None:
 def generate_scene_bg(bg_text: str) -> str | None:
     """
     장면 배경 이미지를 생성합니다.
-    - GPU(CUDA) + VRAM 4GB 이상: 로컬 SDXL-Turbo 사용
+    - GPU(CUDA) + VRAM 충분: 로컬 SD-Turbo (FP16) 초고속 생성
     - GPU 없거나 VRAM 부족: Pollinations.ai 자동 폴백
     Returns: 'static/generated/bgs/bg_xxx.jpg' or None
     """
@@ -283,13 +305,14 @@ def generate_scene_bg(bg_text: str) -> str | None:
         + " detailed environment, no characters, no people, no animals, no text, 2D illustration"
     )
 
-    # 1. 로컬 GPU 시도
+    # 1. 로컬 GPU 시도 (VRAM 체크 포함)
     pipe = _get_pipe()
     if pipe is not None:
         try:
+            # SD-Turbo 스펙: 1~4 step
             image = pipe(
                 prompt=prompt,
-                num_inference_steps=1,
+                num_inference_steps=2,
                 guidance_scale=0.0,
                 height=512, width=512,
             ).images[0]
@@ -306,6 +329,12 @@ def generate_scene_bg(bg_text: str) -> str | None:
     return _generate_bg_pollinations(bg_text)
 
 
+def _check_cuda_available():
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
 
 def generate_scene_bgs_parallel(scene_data: list) -> list:
     """
@@ -334,11 +363,11 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
             except Exception as e:
                 print(f"[BG scene {i} 실패] {e}")
     else:
-        # Pollinations 폴백: 장면들을 동시에 처리
+        # Pollinations 폴백: 스레딩 병렬 처리 (통신 I/O 바운드 최적화)
         print(f"[BG] Pollinations 병렬 모드 — {len(indices)}개 장면 동시 처리")
-        def _gen(i):
-            path = _generate_bg_pollinations(scene_data[i]['bg'])
-            return i, path
+        def _gen(idx_inner):
+            path_inner = _generate_bg_pollinations(scene_data[idx_inner]['bg'])
+            return idx_inner, path_inner
 
         with ThreadPoolExecutor(max_workers=4) as ex:
             futures = {ex.submit(_gen, i): i for i in indices}
@@ -354,52 +383,42 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
     return scene_data
 
 
-def _check_cuda_available():
-    try:
-        import torch
-        return torch.cuda.is_available()
-    except Exception:
-        return False
-
-
 
 def generate_reference_image(korean_word: str, english_word: str, image_prompt: str = None) -> str | None:
     """
-    아이가 그림 그릴 때 보여줄 참고 이미지를 Hugging Face Z-Image 로 생성합니다.
+    아이가 그림 그릴 때 보여줄 참고 이미지를 기존 HF 단일 API에서 
+    로컬 최적화 파이프라인 생성을 사용하도록 변경합니다.
     Returns: base64 data URI string, or None on failure
     """
-    if not Config.HUGGINGFACE_API_KEY:
-        print("[참고 이미지] HUGGINGFACE_API_KEY가 설정되지 않았습니다.")
-        return None
+    prompt = image_prompt or (
+        f"A cute, simple children's drawing reference of a {english_word}. "
+        f"Colorful cartoon style, friendly and approachable, clean white background, "
+        f"no text, suitable for 4 to 7 year old children. standalone object."
+    )
 
     try:
-        # Hugging Face Free Inference API
-        # (Tongyi-MAI/Z-Image-Turbo는 무료 API 서버리스를 미지원하여 SDXL로 임시 대체)
-        API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
-        headers = {"Authorization": f"Bearer {Config.HUGGINGFACE_API_KEY}"}
-
-        prompt = image_prompt or (
-            f"A cute, simple children's drawing reference of a {english_word}. "
-            f"Colorful cartoon style, friendly and approachable, white background, "
-            f"no text, suitable for 4-7 year old children."
-        )
-
-        payload = {
-            "inputs": prompt,
-        }
-
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-        
-        if response.status_code != 200:
-            print(f"[참고 이미지 API 오류] 상태 코드: {response.status_code}, 내용: {response.text}")
+        pipe = _get_pipe()
+        if pipe is None:
+            print("[밑그림] 파이프라인 로딩 오류")
             return None
-            
-        # Hugging Face Inference API returns image binary data directly
-        img_b64 = base64.b64encode(response.content).decode('utf-8')
-        return f"data:image/jpeg;base64,{img_b64}"
+        
+        # SD-Turbo 2 step 생성
+        image = pipe(
+            prompt=prompt,
+            num_inference_steps=2,
+            guidance_scale=0.0,
+            height=512, width=512,
+        ).images[0]
+        
+        import io
+        import base64
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG", quality=85)
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return f"data:image/jpeg;base64,{img_str}"
 
     except Exception as e:
-        print(f"[참고 이미지 생성 오류] {e}")
+        print(f"[로컬 SD 밑그림 생성 오류] {e}")
         return None
 
 def generate_story_illustration(title: str, keywords: list) -> str | None:
