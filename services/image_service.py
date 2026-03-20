@@ -117,7 +117,7 @@ def flatten_scene_images(scene_data, all_drawings):
 
     return scene_data
 
-# ─── 로컬 SDXL-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
+# ─── 로컬 SD-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
 _pipe = None
 _pipe_load_failed = False   # 한번 실패하면 재시도 안 함 (앱 재시작까지)
 
