@@ -31,8 +31,11 @@ def _ensure_dependencies():
             missing.append(pkg)
     if missing:
         print(f"[설치] {', '.join(missing)} 설치 중...")
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet'] + missing)
-        print("[설치] 완료!")
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet'] + missing)
+            print("[설치] 완료!")
+        except Exception as e:
+            print(f"[설치 실패 - 무시하고 계속] {e}")
 
 _ensure_dependencies()
 
@@ -47,6 +50,7 @@ db.init_db()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 app.config['JSON_AS_ASCII'] = False
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 
 # ─── 페이지 라우트 ────────────────────────────────────────────────────────────
@@ -77,7 +81,8 @@ def draw_word(word_id):
     word = db.get_word(word_id)
     if not word:
         abort(404)
-    return render_template('drawing.html', word=word)
+    existing_drawing = db.get_drawing_by_word_id(word_id)
+    return render_template('drawing.html', word=word, existing_drawing=existing_drawing)
 
 
 @app.route('/collection')
@@ -132,6 +137,8 @@ def api_save_drawing():
     if not image_data.startswith('data:image/'):
         return jsonify({'success': False, 'error': '이미지 형식이 잘못됐어요'}), 400
 
+    replace_drawing_id = data.get('replace_drawing_id')
+
     try:
         header, encoded = image_data.split(',', 1)
         img_bytes = base64.b64decode(encoded)
@@ -143,6 +150,16 @@ def api_save_drawing():
             f.write(img_bytes)
 
         relative_path = f"static/generated/drawings/{filename}"
+
+        # 수정 모드: 기존 그림 삭제 후 새로 저장
+        if replace_drawing_id:
+            old = db.get_drawing_with_data(replace_drawing_id)
+            if old and old.get('file_path'):
+                old_file = os.path.join(os.path.dirname(__file__), old['file_path'])
+                if os.path.exists(old_file):
+                    os.remove(old_file)
+            db.delete_drawing(replace_drawing_id)
+
         drawing_id = db.save_drawing(word_id, image_data, relative_path)
 
         return jsonify({'success': True, 'drawing_id': drawing_id})
@@ -315,6 +332,15 @@ def api_drawings():
     return jsonify(drawings)
 
 
+@app.route('/api/drawings/<int:drawing_id>', methods=['DELETE'])
+def api_delete_drawing(drawing_id):
+    try:
+        db.delete_drawing(drawing_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     import sys
     import io
@@ -328,4 +354,4 @@ if __name__ == '__main__':
     print(f"OpenAI API:    {'SET ✓' if Config.OPENAI_API_KEY    else 'NOT SET - no image gen'}")
     print("URL: http://localhost:5000")
     print("=" * 50)
-    app.run(debug=False, port=5000, host='0.0.0.0')
+    app.run(debug=True, port=5000, host='0.0.0.0')

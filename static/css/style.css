@@ -583,6 +583,46 @@ body::before {
   box-shadow: 0 0 0 4px rgba(255,107,157,0.3);
   transform: translateY(-4px);
 }
+/* 플로팅 오버레이 내 카드: JS가 transform 직접 제어 (CSS hover/selected transform 비활성화) */
+#float-overlay .drawing-card:hover    { transform: none; box-shadow: none; }
+#float-overlay .drawing-card.selected { transform: none; }
+#float-overlay .drawing-card:hover .card-actions { opacity: 1; }
+
+/* 카드 액션 버튼 (호버 시 표시) */
+.card-actions {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 5;
+}
+.drawing-card:hover .card-actions { opacity: 1; }
+
+.card-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.card-action-btn:hover {
+  transform: scale(1.15);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
 .drawing-card.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
 .drawing-card img {
@@ -898,9 +938,42 @@ audio { width: 100%; border-radius: 8px; }
 .fade-in { animation: fadeIn 0.4s ease both; }
 
 /* ─── 반응형 ────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* 모음장 헤더: 타이틀과 버튼 줄바꿈 */
+  .collection-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .collection-header > div {
+    flex-wrap: wrap;
+  }
+
+  /* 모바일에서 둥실둥실 버튼 숨김 */
+  #btn-float { display: none !important; }
+
+  /* 도감 그리드: 2열 */
+  .drawings-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* 카드 이미지 높이 축소 */
+  .drawing-card img,
+  .drawing-card > div[style*="height:140px"],
+  .drawing-card > div[style*="height: 140px"] {
+    height: 100px !important;
+  }
+
+  .drawing-card { padding: 12px; }
+  .drawing-card-word { font-size: 0.95rem; }
+}
+
 @media (max-width: 480px) {
   .btn-big { padding: 16px 32px; font-size: 1.2rem; }
-  .drawings-grid { grid-template-columns: repeat(2, 1fr); }
+  .drawings-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
 }
 
 /* ─── 섹션 제목 ─────────────────────────────────────────────────────────────── */
