@@ -3,326 +3,59 @@
 {% block nav_title %}{{ story.title }}{% endblock %}
 
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/bookshelf.css') }}">
 <style>
-/* ─────────────────────────────────────────────
-   책 전체 레이아웃
-───────────────────────────────────────────── */
-.book-wrapper {
+.sb-wrapper {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding: 16px 8px 28px;
+  justify-content: center;
+  width: 100%;
   min-height: calc(100vh - 80px);
+  background: rgba(255,255,255,0.9);
+  padding: 16px;
+  box-sizing: border-box;
 }
 
-/* ─────────────────────────────────────────────
-   네비게이션 행 (버튼 + 책)
-───────────────────────────────────────────── */
-.book-nav {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  max-width: 960px;
-}
-
-.page-turn-btn {
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: none;
-  background: #fff;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.18);
-  font-size: 2.2rem;
-  line-height: 1;
-  cursor: pointer;
-  color: #555;
-  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  z-index: 30;
-}
-.page-turn-btn:hover:not(:disabled) {
-  background: #ffe066;
-  transform: scale(1.13);
-  box-shadow: 0 5px 16px rgba(0,0,0,0.22);
-  color: #222;
-}
-.page-turn-btn:disabled { opacity: 0.25; cursor: not-allowed; }
-
-/* ─────────────────────────────────────────────
-   책 씬 (perspective 컨테이너)
-───────────────────────────────────────────── */
-.book-scene {
-  flex: 1;
-  width: 100%;
-  perspective: 2800px;
-  position: relative;
-}
-
-/* ─────────────────────────────────────────────
-   책 스프레드 컨테이너
-───────────────────────────────────────────── */
-.book-spread-container {
-  position: relative;
-  width: 100%;
-  height: 480px;
-  border-radius: 6px 10px 10px 6px;
-  overflow: visible;
-  box-shadow:
-    -4px 4px 0 #c8b89a,
-    0 12px 48px rgba(0,0,0,0.28),
-    0 4px 12px rgba(0,0,0,0.14);
-}
-
-/* ─────────────────────────────────────────────
-   페이지 기본 스타일
-───────────────────────────────────────────── */
-.b-page {
+/* 왼쪽 배경/그림 페이지 */
+.sb-left-page {
   position: absolute;
-  top: 0;
+  left: 0;
   width: 50%;
   height: 100%;
+  border-radius: 10px 0 0 10px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.b-left  { left: 0;  border-radius: 6px 0 0 6px; z-index: 2; }
-.b-right { right: 0; border-radius: 0 10px 10px 0; }
-
-/* 왼쪽 정적 페이지 */
-#b-static-left { z-index: 2; }
-
-/* 오른쪽 언더(플립 중 드러남) */
-#b-under-right { z-index: 1; }
-
-/* 책 등(spine) 그림자 */
-.book-spine {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 8px;
-  height: 100%;
-  background: linear-gradient(to right,
-    rgba(0,0,0,0.18) 0%,
-    rgba(0,0,0,0.30) 30%,
-    rgba(0,0,0,0.30) 70%,
-    rgba(0,0,0,0.18) 100%);
-  z-index: 25;
-  pointer-events: none;
 }
 
-/* ─────────────────────────────────────────────
-   플립 카드 (3D 페이지 넘김)
-───────────────────────────────────────────── */
-#b-flip-card {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 50%;
-  height: 100%;
-  transform-origin: left center;
-  transform-style: preserve-3d;
-  transition: transform 0.72s cubic-bezier(0.645, 0.045, 0.355, 1.000);
-  z-index: 10;
-}
-#b-flip-card.no-transition { transition: none !important; }
-
-.b-flip-face {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  backface-visibility: hidden;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-#b-flip-front { border-radius: 0 10px 10px 0; }
-#b-flip-back  {
-  transform: rotateY(180deg);
-  border-radius: 6px 0 0 6px;
-}
-
-/* 플립 중 그림자 효과 */
-#b-flip-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: linear-gradient(to right, rgba(0,0,0,0.18), transparent 40%);
-  z-index: 15;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.36s;
-}
-#b-flip-card.flipping::before { opacity: 1; }
-
-/* ─────────────────────────────────────────────
-   장면 배경 레이어 (sky + ground)
-───────────────────────────────────────────── */
+/* 장면 배경 */
 .scene-sky {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
 }
-/* Pollinations.ai 생성 배경 이미지 (CSS 그라데이션 위에 페이드인) */
 .scene-bg-img {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
-  object-position: center top;
   opacity: 0;
   transition: opacity 1.4s ease;
   z-index: 1;
   pointer-events: none;
 }
-/* 배경 생성 대기 중 shimmer (그라데이션 위에 살짝 반짝임) */
-@keyframes bg-shimmer {
-  0%   { opacity: 0.06; }
-  50%  { opacity: 0.14; }
-  100% { opacity: 0.06; }
-}
-.scene-sky::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
-  background-size: 200% 200%;
-  animation: bg-shimmer 2.5s ease-in-out infinite;
-  pointer-events: none;
-}
-/* 이미지 로드 완료 시 shimmer 숨김 */
-.scene-sky:has(.scene-bg-img[style*="opacity: 1"])::after,
-.scene-sky:has(.scene-bg-img[style*="opacity:1"])::after {
-  display: none;
-}
-/* 하단 30% 지면 */
-.scene-horizon {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 30%;
-  z-index: 1;
-}
-/* 주변 어두운 비네트로 입체감 */
 .scene-vignette {
   position: absolute;
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse at 50% 50%,
-      transparent 40%,
-      rgba(0,0,0,0.22) 100%);
+  background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,0.22) 100%);
 }
 
-/* ─────────────────────────────────────────────
-   분위기 데코레이션 (별, 구름, 거품 등)
-───────────────────────────────────────────── */
-/* 별 (space/moon) */
-.deco.s1,.deco.s2,.deco.s3,.deco.s4,.deco.s5 {
-  position: absolute; border-radius: 50%; z-index: 2; pointer-events: none;
-  background: #fff;
-  box-shadow: 0 0 6px 2px rgba(255,255,255,0.8);
-}
-.deco.s1 { width:5px;height:5px; top:8%;  left:12%; }
-.deco.s2 { width:4px;height:4px; top:18%; right:18%; }
-.deco.s3 { width:3px;height:3px; top:32%; left:55%; }
-.deco.s4 { width:5px;height:5px; top:12%; left:70%; }
-.deco.s5 { width:3px;height:3px; top:40%; right:10%; }
-/* 달 오브 */
-.deco.moon-orb {
-  position: absolute; z-index: 2; pointer-events: none;
-  width: 48px; height: 48px; border-radius: 50%;
-  top: 8%; right: 14%;
-  background: radial-gradient(circle at 35% 35%, #fffde7, #ffd740 60%, #f5a623);
-  box-shadow: 0 0 18px 6px rgba(255,235,59,0.35);
-}
-/* 구름 (cloud kingdom) */
-.deco.c1,.deco.c2,.deco.c3 {
-  position: absolute; z-index: 2; pointer-events: none;
-  background: rgba(255,255,255,0.72);
-  border-radius: 50px;
-}
-.deco.c1 { width:72px;height:26px; top:14%; left:6%;  box-shadow:0 0 0 12px rgba(255,255,255,0.3); }
-.deco.c2 { width:54px;height:20px; top:26%; right:8%; box-shadow:0 0 0 9px rgba(255,255,255,0.25); }
-.deco.c3 { width:44px;height:16px; top:8%;  right:28%; }
-.deco.c1.small { width:44px;height:16px; }
-/* 눈 (ice) */
-.deco.snow1,.deco.snow2,.deco.snow3 {
-  position: absolute; z-index: 2; pointer-events: none;
-  width: 6px; height: 6px; border-radius: 50%;
-  background: rgba(255,255,255,0.8);
-}
-.deco.snow1 { top:10%; left:20%; width:8px;height:8px; }
-.deco.snow2 { top:22%; right:25%; }
-.deco.snow3 { top:35%; left:60%; width:5px;height:5px; }
-.deco.aurora-line {
-  position: absolute; z-index: 2; pointer-events: none;
-  top: 15%; left: 0; right: 0; height: 40px;
-  background: linear-gradient(to right, transparent 0%, rgba(0,255,180,0.2) 30%, rgba(0,200,255,0.25) 60%, transparent 100%);
-  border-radius: 50%;
-  filter: blur(6px);
-}
-/* 거품 (ocean) */
-.deco.b1,.deco.b2,.deco.b3 {
-  position: absolute; z-index: 2; pointer-events: none;
-  border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.55);
-  background: rgba(255,255,255,0.12);
-}
-.deco.b1 { width:16px;height:16px; bottom:38%; left:18%; }
-.deco.b2 { width:10px;height:10px; bottom:52%; right:22%; }
-.deco.b3 { width:8px; height:8px;  bottom:44%; left:55%; }
-.deco.wave-deco {
-  position: absolute; z-index: 2; pointer-events: none;
-  bottom: 28%; left: 0; right: 0; height: 18px;
-  background: linear-gradient(to right,
-    transparent 0%, rgba(255,255,255,0.18) 20%,
-    rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.18) 80%, transparent 100%);
-  border-radius: 50%;
-}
-/* 서커스 스파클 */
-.deco.sp1,.deco.sp2,.deco.sp3,.deco.sp4 {
-  position: absolute; z-index: 2; pointer-events: none;
-  width: 8px; height: 8px; border-radius: 50%;
-}
-.deco.sp1 { top:10%;left:10%;  background:#ffd700; box-shadow:0 0 8px 3px rgba(255,215,0,0.7); }
-.deco.sp2 { top:18%;right:12%; background:#ff69b4; box-shadow:0 0 8px 3px rgba(255,105,180,0.7); }
-.deco.sp3 { top:30%;left:50%;  background:#00e5ff; box-shadow:0 0 8px 3px rgba(0,229,255,0.7); }
-.deco.sp4 { top:8%; right:35%; background:#b9f542; box-shadow:0 0 8px 3px rgba(185,245,66,0.7); }
-/* 꽃 데코 */
-.deco.fl1,.deco.fl2,.deco.fl3 {
-  position: absolute; z-index: 2; pointer-events: none;
-  font-size: 1.4rem; line-height: 1;
-}
-.deco.fl1::after { content:'🌸'; position:absolute; bottom:1px; left:6%; }
-.deco.fl2::after { content:'🌼'; position:absolute; bottom:1px; right:10%; }
-.deco.fl3::after { content:'🌺'; position:absolute; bottom:1px; left:45%; }
-.deco.fl1 { bottom:29%; left:6%;  width:24px;height:24px; }
-.deco.fl2 { bottom:29%; right:10%;width:24px;height:24px; }
-.deco.fl3 { bottom:29%; left:45%; width:24px;height:24px; }
-
-/* ─────────────────────────────────────────────
-   그림 스테이지 (ground / sky / ground-sub)
-───────────────────────────────────────────── */
+/* 그림 스테이지 */
 @keyframes float-anim {
-  0%, 100% { transform: translateY(0px);  }
+  0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-10px); }
 }
-
-/* 기본 스테이지 공통 */
 .drawing-stage {
   position: absolute;
   display: flex;
@@ -331,39 +64,26 @@
   z-index: 10;
   gap: 0;
 }
-
-/* ── 지상 (메인, 하단 중앙) ── */
 .drawing-stage.ground, .drawing-stage.cover-ground {
   bottom: 0; left: 0; right: 0;
   padding-bottom: 16px;
 }
-
-/* ── 지상 서브 (오른쪽 구석, 작게) ── */
 .drawing-stage.ground-sub {
   bottom: 0; right: 4%;
   width: 38%;
   z-index: 9;
   padding-bottom: 12px;
 }
-.drawing-stage.ground-sub .drawing-img   { max-height: 130px; max-width: 88%; }
-.drawing-stage.ground-sub .drawing-shadow { width: 55%; }
-.drawing-stage.ground-sub .drawing-word-badge { font-size: 0.72rem; padding: 2px 10px; }
-
-/* ── 하늘 (상단 우측, 부유) ── */
 .drawing-stage.sky {
   top: 6%; right: 8%;
   width: 38%;
   animation: float-anim 3s ease-in-out infinite;
 }
-
-/* ── 하늘 왼쪽 (보조 위치) ── */
 .drawing-stage.sky-right {
   top: 14%; left: 6%;
   width: 32%;
   animation: float-anim 3.6s ease-in-out infinite reverse;
 }
-
-/* ── 그림 이미지 (누끼 처리됨 — blend 불필요) ── */
 .drawing-img {
   max-width: 82%;
   max-height: 250px;
@@ -372,25 +92,13 @@
   filter: drop-shadow(0 6px 18px rgba(0,0,0,0.4));
   display: block;
 }
-/* 하늘용 이미지 */
-.drawing-img.sky-img {
-  max-width: 100%;
-  max-height: 110px;
-}
-
-/* 표지 그림 (조금 더 작게) */
-.drawing-img.cover-img {
-  max-height: 200px;
-  max-width: 72%;
-}
-
+.drawing-img.sky-img { max-width: 100%; max-height: 110px; }
+.drawing-img.cover-img { max-height: 200px; max-width: 72%; }
 .drawing-emoji-fallback {
   font-size: 4.5rem;
   opacity: 0.65;
   filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3));
 }
-
-/* 발밑 타원 그림자 */
 .drawing-shadow {
   width: 50%;
   height: 12px;
@@ -401,26 +109,7 @@
 }
 .drawing-shadow.small { width: 38%; height: 9px; }
 
-/* 단어 배지 */
-.drawing-word-badge {
-  background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(6px);
-  border-radius: 20px;
-  padding: 4px 16px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #333;
-  margin-bottom: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  white-space: nowrap;
-}
-.drawing-word-badge.small {
-  font-size: 0.72rem;
-  padding: 2px 10px;
-  margin-bottom: 5px;
-}
-
-/* 표지 타이틀 오버레이 (그림 위, 상단 배치) */
+/* 표지 제목 오버레이 */
 .cover-title-overlay {
   position: absolute;
   top: 10%; left: 50%;
@@ -434,7 +123,7 @@
   font-size: 1.9rem;
   font-weight: 900;
   color: rgba(255,255,255,0.97);
-  text-shadow: 0 2px 16px rgba(0,0,0,0.6), 0 0 40px rgba(0,0,0,0.35);
+  text-shadow: 0 2px 16px rgba(0,0,0,0.6);
   line-height: 1.3;
   word-break: keep-all;
   background: rgba(0,0,0,0.18);
@@ -443,249 +132,155 @@
   backdrop-filter: blur(2px);
 }
 
-/* ─────────────────────────────────────────────
-   텍스트 페이지 (오른쪽)
-───────────────────────────────────────────── */
-.text-page {
-  background: #fffef9;
-  padding: 32px 28px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0;
+/* 데코 */
+.deco.s1,.deco.s2,.deco.s3,.deco.s4,.deco.s5 {
+  position:absolute;border-radius:50%;z-index:2;pointer-events:none;
+  background:#fff;box-shadow:0 0 6px 2px rgba(255,255,255,0.8);
 }
-.page-paragraph {
-  font-size: 1.2rem;
-  line-height: 2.05;
-  color: #2c2c2c;
-  margin: 0;
-  text-align: left;
-  word-break: keep-all;
-  white-space: pre-line;
-  font-family: 'Nanum Gothic', 'Apple SD Gothic Neo', sans-serif;
+.deco.s1{width:5px;height:5px;top:8%;left:12%;}
+.deco.s2{width:4px;height:4px;top:18%;right:18%;}
+.deco.s3{width:3px;height:3px;top:32%;left:55%;}
+.deco.s4{width:5px;height:5px;top:12%;left:70%;}
+.deco.s5{width:3px;height:3px;top:40%;right:10%;}
+.deco.moon-orb{
+  position:absolute;z-index:2;pointer-events:none;
+  width:48px;height:48px;border-radius:50%;
+  top:8%;right:14%;
+  background:radial-gradient(circle at 35% 35%,#fffde7,#ffd740 60%,#f5a623);
+  box-shadow:0 0 18px 6px rgba(255,235,59,0.35);
 }
-.page-num {
-  position: absolute;
-  bottom: 14px;
-  right: 18px;
-  font-size: 0.78rem;
-  color: #ccc;
-  font-style: italic;
+.deco.c1,.deco.c2,.deco.c3{
+  position:absolute;z-index:2;pointer-events:none;
+  background:rgba(255,255,255,0.72);border-radius:50px;
 }
+.deco.c1{width:72px;height:26px;top:14%;left:6%;}
+.deco.c2{width:54px;height:20px;top:26%;right:8%;}
+.deco.c3{width:44px;height:16px;top:8%;right:28%;}
+.deco.b1,.deco.b2,.deco.b3{
+  position:absolute;z-index:2;pointer-events:none;
+  border-radius:50%;border:2px solid rgba(255,255,255,0.55);
+  background:rgba(255,255,255,0.12);
+}
+.deco.b1{width:16px;height:16px;bottom:38%;left:18%;}
+.deco.b2{width:10px;height:10px;bottom:52%;right:22%;}
+.deco.b3{width:8px;height:8px;bottom:44%;left:55%;}
+.deco.wave-deco{
+  position:absolute;z-index:2;pointer-events:none;
+  bottom:28%;left:0;right:0;height:18px;
+  background:linear-gradient(to right,transparent 0%,rgba(255,255,255,0.18) 20%,rgba(255,255,255,0.25) 50%,rgba(255,255,255,0.18) 80%,transparent 100%);
+  border-radius:50%;
+}
+.deco.aurora-line{
+  position:absolute;z-index:2;pointer-events:none;
+  top:15%;left:0;right:0;height:40px;
+  background:linear-gradient(to right,transparent 0%,rgba(0,255,180,0.2) 30%,rgba(0,200,255,0.25) 60%,transparent 100%);
+  border-radius:50%;filter:blur(6px);
+}
+.deco.snow1,.deco.snow2,.deco.snow3{
+  position:absolute;z-index:2;pointer-events:none;
+  width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.8);
+}
+.deco.snow1{top:10%;left:20%;width:8px;height:8px;}
+.deco.snow2{top:22%;right:25%;}
+.deco.snow3{top:35%;left:60%;}
+.deco.sp1,.deco.sp2,.deco.sp3,.deco.sp4{
+  position:absolute;z-index:2;pointer-events:none;width:8px;height:8px;border-radius:50%;
+}
+.deco.sp1{top:10%;left:10%;background:#ffd700;box-shadow:0 0 8px 3px rgba(255,215,0,0.7);}
+.deco.sp2{top:18%;right:12%;background:#ff69b4;box-shadow:0 0 8px 3px rgba(255,105,180,0.7);}
+.deco.sp3{top:30%;left:50%;background:#00e5ff;box-shadow:0 0 8px 3px rgba(0,229,255,0.7);}
+.deco.sp4{top:8%;right:35%;background:#b9f542;box-shadow:0 0 8px 3px rgba(185,245,66,0.7);}
+.deco.fl1,.deco.fl2,.deco.fl3{
+  position:absolute;z-index:2;pointer-events:none;font-size:1.4rem;line-height:1;
+}
+.deco.fl1::after{content:'🌸';position:absolute;bottom:1px;left:6%;}
+.deco.fl2::after{content:'🌼';position:absolute;bottom:1px;right:10%;}
+.deco.fl3::after{content:'🌺';position:absolute;bottom:1px;left:45%;}
+.deco.fl1{bottom:29%;left:6%;width:24px;height:24px;}
+.deco.fl2{bottom:29%;right:10%;width:24px;height:24px;}
+.deco.fl3{bottom:29%;left:45%;width:24px;height:24px;}
 
-/* ─────────────────────────────────────────────
-   표지 페이지
-───────────────────────────────────────────── */
-.cover-img-page { background: #1a1a2e; padding: 0; }
-.cover-img-page img { width: 100%; height: 100%; object-fit: cover; }
-.cover-emoji-placeholder {
-  font-size: 6rem;
-  opacity: 0.5;
-  background: linear-gradient(135deg, #e0f2fe, #b3e5fc);
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-}
-
-.cover-text-page {
-  background: #fffef9;
-  padding: 36px 30px;
-  gap: 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-}
-.book-main-title {
-  font-size: 1.8rem;
-  font-weight: 900;
-  color: #222;
-  margin: 0;
-  line-height: 1.3;
-  word-break: keep-all;
-}
+/* 오른쪽 페이지 내용 */
 .tts-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #f5f5f5;
-  border-radius: 14px;
-  padding: 10px 18px;
-  width: 100%;
-  box-sizing: border-box;
+  display: flex; align-items: center; gap: 12px;
+  background: #f5f5f5; border-radius: 14px; padding: 10px 18px;
+  width: 100%; box-sizing: border-box;
 }
 .tts-play-btn {
-  width: 42px; height: 42px;
-  border-radius: 50%;
-  border: none;
-  background: #ffe066;
-  cursor: pointer;
-  font-size: 1rem;
-  flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
-  transition: transform 0.15s;
+  width: 42px; height: 42px; border-radius: 50%; border: none;
+  background: #ffe066; cursor: pointer; font-size: 1rem; flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12); transition: transform 0.15s;
 }
 .tts-play-btn:hover { transform: scale(1.1); }
 .keywords-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .cover-hint { font-size: 0.82rem; color: #bbb; margin: 0; }
-
-/* ─────────────────────────────────────────────
-   교훈 + 마지막 페이지
-───────────────────────────────────────────── */
-.moral-page {
-  background: linear-gradient(145deg, #fffde7, #fff9c4);
-  gap: 16px;
-  text-align: center;
-  padding: 32px 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+.book-main-title { font-size: 1.8rem; font-weight: 900; color: #222; margin: 0; line-height: 1.3; }
+.keyword-tag {
+  background: #f0f0f0; color: #666; padding: 4px 12px;
+  border-radius: 20px; font-size: 0.85rem; font-weight: 600;
 }
-.moral-big-icon { font-size: 3.2rem; }
-.moral-label-text {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #f59e0b;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.moral-big-icon { font-size: 3.2rem; text-align: center; }
+.moral-label-text { font-size: 0.8rem; font-weight: 800; color: #f59e0b; letter-spacing: 0.08em; text-align: center; }
+.moral-body { font-size: 1.05rem; line-height: 1.85; color: #555; font-style: italic; text-align: center; word-break: keep-all; margin: 0; }
+.end-big-icon { font-size: 3.2rem; text-align: center; }
+.end-heading { font-size: 1.4rem; font-weight: 800; color: #333; margin: 0; text-align: center; }
+.end-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.btn {
+  display: block; text-align: center; padding: 12px 20px;
+  border-radius: 12px; font-size: 1rem; font-weight: 700;
+  text-decoration: none; cursor: pointer; border: none;
+  font-family: inherit;
 }
-.moral-body {
-  font-size: 1.05rem;
-  line-height: 1.85;
-  color: #555;
-  font-style: italic;
-  text-align: center;
-  margin: 0;
-  word-break: keep-all;
-}
-.end-page {
-  background: #fffef9;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 32px 24px;
-}
-.end-big-icon  { font-size: 3.2rem; }
-.end-heading   { font-size: 1.4rem; font-weight: 800; color: #333; margin: 0; }
-.end-actions   { display: flex; flex-direction: column; gap: 10px; width: 100%; }
-
-/* ─────────────────────────────────────────────
-   인디케이터
-───────────────────────────────────────────── */
-.page-indicator {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.88rem;
-  color: #999;
-}
-.page-dots { display: flex; gap: 5px; }
-.page-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #ddd;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
-}
-.page-dot.active { background: #fbbf24; transform: scale(1.3); }
-
-/* ─────────────────────────────────────────────
-   모바일 (세로 배치)
-───────────────────────────────────────────── */
-@media (max-width: 640px) {
-  .book-spread-container {
-    height: auto;
-    display: flex;
-    flex-direction: column;
-    border-radius: 10px;
-    overflow: hidden;
-  }
-  .b-page {
-    position: relative;
-    width: 100%;
-    height: 260px;
-    border-radius: 0 !important;
-  }
-  .book-spine { display: none; }
-  #b-flip-card {
-    position: relative;
-    width: 100%;
-    height: 260px;
-    transform-origin: top center !important;
-  }
-  #b-flip-card.flipping {
-    transform: rotateX(-180deg) !important;
-  }
-  .b-flip-face {
-    border-radius: 0 !important;
-  }
-  .page-turn-btn   { width: 44px; height: 44px; font-size: 1.6rem; }
-  .book-main-title { font-size: 1.35rem; }
-  .page-paragraph  { font-size: 1.05rem; }
-  .drawing-img     { max-height: 140px; max-width: 78%; }
-  .drawing-img.sky-img { max-height: 80px; }
-  .cover-title-text { font-size: 1.35rem; padding: 6px 14px; }
-  .drawing-stage.ground, .drawing-stage.cover-ground { padding-bottom: 10px; }
-  .drawing-stage.sky   { top: 4%; right: 5%; width: 35%; }
-  .drawing-stage.sky-right { top: 10%; left: 4%; width: 28%; }
-}
+.btn-yellow { background: #ffe066; color: #333; }
+.btn-blue   { background: #e0f0ff; color: #2563eb; }
+.btn-white  { background: #f5f5f5; color: #e53e3e; }
 </style>
 
-<div class="book-wrapper" data-story-id="{{ story.id }}">
+{% if story.audio_path %}
+<audio id="tts-audio" preload="auto"
+       src="{{ url_for('static', filename=story.audio_path.replace('static/', '')) }}">
+</audio>
+{% endif %}
 
-  {% if story.audio_path %}
-  <audio id="tts-audio" preload="auto"
-         src="{{ url_for('static', filename=story.audio_path.replace('static/', '')) }}">
-  </audio>
-  {% endif %}
+<div class="sb-wrapper" data-story-id="{{ story.id }}">
+  <div class="opened-book-container">
+    <div class="book-volume">
 
-  <div class="book-nav">
-    <button class="page-turn-btn" id="prev-btn" disabled>&#8249;</button>
+      <!-- 왼쪽: 배경 + 그림 -->
+      <div class="sb-left-page" id="sb-left"></div>
 
-    <div class="book-scene">
-      <div class="book-spread-container" id="book-spread-container">
-
-        <!-- 책 등 그림자 -->
-        <div class="book-spine"></div>
-
-        <!-- 왼쪽 정적 페이지 -->
-        <div class="b-page b-left" id="b-static-left"></div>
-
-        <!-- 오른쪽 언더 페이지 (플립 시 드러남) -->
-        <div class="b-page b-right" id="b-under-right"></div>
-
-        <!-- 3D 플립 카드 -->
-        <div id="b-flip-card">
-          <div class="b-flip-face" id="b-flip-front"></div>
-          <div class="b-flip-face" id="b-flip-back"></div>
+      <!-- 오른쪽: 텍스트 -->
+      <div class="book-pages">
+        <a href="/library" class="close-button"
+           style="text-decoration:none;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">
+          ←
+        </a>
+        <h2 class="story-title">{{ story.title }}</h2>
+        <div class="story-page-content">
+          <div id="sb-content-inner"></div>
         </div>
-
+        <div class="paging-controls">
+          <button class="page-btn disabled" id="prev-btn" disabled>◀ 이전</button>
+          <span class="page-indicator">
+            <span id="current-page">1</span> / <span id="total-pages">?</span>
+          </span>
+          <button class="page-btn" id="next-btn">다음 ▶</button>
+        </div>
       </div>
+
     </div>
-
-    <button class="page-turn-btn" id="next-btn">&#8250;</button>
   </div>
-
-  <!-- 페이지 인디케이터 -->
-  <div class="page-indicator">
-    <div class="page-dots" id="page-dots"></div>
-    <span><span id="current-page">1</span> / <span id="total-pages">?</span></span>
-  </div>
-
 </div>
 
-<!-- 스토리 데이터 (JSON) -->
 <script id="story-data" type="application/json">
 {
-  "title":      {{ story.title   | tojson }},
-  "content":    {{ story.content | tojson }},
-  "moral":      {{ story.moral   | tojson }},
-  "keywords":   {{ story.keywords | tojson }},
-  "scene_data": {{ story.scene_data | tojson }},
+  "title":       {{ story.title      | tojson }},
+  "content":     {{ story.content    | tojson }},
+  "moral":       {{ story.moral      | tojson }},
+  "keywords":    {{ story.keywords   | tojson }},
+  "scene_data":  {{ story.scene_data  | tojson }},
   "layout_data": {{ story.layout_data | tojson }},
-  "drawings":   {{ drawings | tojson }}
+  "drawings":    {{ drawings | tojson }}
 }
 </script>
 {% endblock %}
