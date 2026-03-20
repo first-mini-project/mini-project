@@ -56,6 +56,7 @@
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-10px); }
 }
+/* ── 그림 스테이지: 아이 그림이 메인 ──────────────────────── */
 .drawing-stage {
   position: absolute;
   display: flex;
@@ -64,50 +65,80 @@
   z-index: 10;
   gap: 0;
 }
+/* 주 그림: 화면 중앙 하단, 크게 */
 .drawing-stage.ground, .drawing-stage.cover-ground {
   bottom: 0; left: 0; right: 0;
-  padding-bottom: 16px;
+  padding-bottom: 10px;
 }
+/* 보조 그림: 우측 하단, 작게 (단독 보조일 때) */
 .drawing-stage.ground-sub {
-  bottom: 0; right: 4%;
-  width: 38%;
+  bottom: 0; right: 3%;
+  width: 34%;
   z-index: 9;
-  padding-bottom: 12px;
+  padding-bottom: 8px;
 }
+/* 두 지상 그림 나란히 배치 (합계 98% → 2% 여백) */
+.drawing-stage.ground-pair-l {
+  bottom: 0; left: 0; width: 52%;
+  padding-bottom: 10px;
+}
+.drawing-stage.ground-pair-r {
+  bottom: 0; right: 0; width: 46%;
+  z-index: 9;
+  padding-bottom: 10px;
+}
+/* 하늘 그림: 중앙 상단, 크게 (달·무지개 등) */
 .drawing-stage.sky {
-  top: 6%; right: 8%;
-  width: 38%;
+  top: 4%; left: 0; right: 0;
   animation: float-anim 3s ease-in-out infinite;
 }
+/* 두 번째 하늘 그림: 우상단 */
 .drawing-stage.sky-right {
-  top: 14%; left: 6%;
-  width: 32%;
+  top: 4%; right: 4%;
+  width: 36%;
   animation: float-anim 3.6s ease-in-out infinite reverse;
 }
+/* 꿈꾸는 듯한 효과: 수중 장면에서 하늘 그림 등 (상상·소원) */
+.drawing-stage.dream {
+  top: 8%; left: 0; right: 0;
+  animation: float-anim 4s ease-in-out infinite;
+}
+.drawing-stage.dream .drawing-img {
+  opacity: 0.55;
+  filter: drop-shadow(0 0 18px rgba(255,255,255,0.9))
+          drop-shadow(0 0 8px rgba(150,200,255,0.7))
+          blur(1.5px);
+}
+/* sky-right + dream: 우상단 위치 유지하면서 dream 시각 효과 적용 */
+.drawing-stage.sky-right.dream {
+  top: 4%; right: 4%; left: auto; width: 36%;
+}
+/* 그림 이미지 — vh 기반으로 화면 크기에 비례하게 */
 .drawing-img {
-  max-width: 82%;
-  max-height: 250px;
+  max-width: 88%;
+  max-height: 44vh;   /* 기본 지상 그림: 페이지 높이(75vh)의 약 58% */
   width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 6px 18px rgba(0,0,0,0.4));
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.45));
   display: block;
 }
-.drawing-img.sky-img { max-width: 100%; max-height: 110px; }
-.drawing-img.cover-img { max-height: 200px; max-width: 72%; }
+.drawing-img.sky-img   { max-width: 80%; max-height: 30vh; }  /* 하늘 그림 */
+.drawing-img.cover-img { max-height: 34vh; max-width: 76%; }  /* 표지 그림 */
+.drawing-img.sub-img   { max-width: 96%; max-height: 32vh; }  /* 보조/쌍 그림 */
 .drawing-emoji-fallback {
-  font-size: 4.5rem;
-  opacity: 0.65;
-  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3));
+  font-size: 5.5rem;
+  opacity: 0.75;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
 }
 .drawing-shadow {
-  width: 50%;
-  height: 12px;
+  width: 55%;
+  height: 14px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(0,0,0,0.30) 0%, transparent 70%);
-  margin-top: -5px;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0.32) 0%, transparent 70%);
+  margin-top: -6px;
   flex-shrink: 0;
 }
-.drawing-shadow.small { width: 38%; height: 9px; }
+.drawing-shadow.small { width: 40%; height: 10px; }
 
 /* 표지 제목 오버레이 */
 .cover-title-overlay {

@@ -254,23 +254,51 @@ def _get_pipe():
     return _pipe
 
 
-def _generate_bg_pollinations(bg_text: str) -> str | None:
+def _build_bg_prompt(bg_text: str, exclude_en: list = None) -> tuple:
+    """배경 프롬프트 생성. (positive_prompt, negative_prompt) 튜플 반환."""
+    # bg_text에서 제외 키워드 단어가 포함돼 있으면 해당 구절을 'scenery' 로 대체 (Gemini 실수 방어)
+    cleaned = bg_text or ''
+    if exclude_en:
+        for kw in exclude_en:
+            if kw and kw.lower() in cleaned.lower():
+                import re as _re
+                cleaned = _re.sub(r'\b' + _re.escape(kw) + r'\b', 'scenery', cleaned, flags=_re.IGNORECASE)
+
+    positive = (
+        "pure scenery background only, "
+        + cleaned
+        + ", children's storybook illustration, watercolor art style,"
+        + " soft pastel colors, magical whimsical background, 2D flat illustration,"
+        + " empty landscape with no characters"
+    )
+
+    # 네거티브 프롬프트: 아이가 그린 그림의 키워드 + 공통 제외 항목
+    negative_parts = [
+        "characters", "people", "animals", "creatures", "figures",
+        "text", "letters", "watermark", "signature", "logo",
+    ]
+    if exclude_en:
+        negative_parts = list(exclude_en) + negative_parts
+
+    negative = ', '.join(negative_parts)
+    return positive, negative
+
+
+def _generate_bg_pollinations(bg_text: str, exclude_en: list = None) -> str | None:
     """
     GPU 없을 때 Pollinations.ai로 배경 이미지를 생성합니다. (무료, GPU 불필요)
     Returns: 'static/generated/bgs/bg_xxx.jpg' or None
     """
     try:
-        prompt = (
-            bg_text
-            + ", children's storybook illustration, watercolor art style,"
-            + " soft pastel colors, magical whimsical background scenery,"
-            + " detailed environment, no characters, no people, no animals, no text, 2D illustration"
-        )
-        encoded = urllib.parse.quote(prompt)
+        positive, negative = _build_bg_prompt(bg_text, exclude_en)
+        encoded = urllib.parse.quote(positive)
+        neg_encoded = urllib.parse.quote(negative)
         seed = abs(hash(bg_text)) % 100000
-        url = f"https://image.pollinations.ai/prompt/{encoded}?width=512&height=512&seed={seed}&nologo=true&model=flux"
+        url = (f"https://image.pollinations.ai/prompt/{encoded}"
+               f"?negative={neg_encoded}&width=512&height=512"
+               f"&seed={seed}&nologo=true&model=flux")
 
-        resp = requests.get(url, timeout=25)  # 타임아웃 단축
+        resp = requests.get(url, timeout=25)
         if resp.status_code != 200:
             print(f"[Pollinations] 응답 오류: {resp.status_code}")
             return None
@@ -288,9 +316,10 @@ def _generate_bg_pollinations(bg_text: str) -> str | None:
 
 
 
-def generate_scene_bg(bg_text: str) -> str | None:
+def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
     """
     장면 배경 이미지를 생성합니다.
+    exclude_en: 배경에 그리지 않을 오브젝트 영어 키워드 (아이가 그린 그림 키워드)
     - GPU(CUDA) + VRAM 충분: 로컬 SD-Turbo (FP16) 초고속 생성
     - GPU 없거나 VRAM 부족: Pollinations.ai 자동 폴백
     Returns: 'static/generated/bgs/bg_xxx.jpg' or None
@@ -298,21 +327,16 @@ def generate_scene_bg(bg_text: str) -> str | None:
     if not bg_text:
         return None
 
-    prompt = (
-        bg_text
-        + ", children's storybook illustration, watercolor art style,"
-        + " soft pastel colors, magical whimsical background scenery,"
-        + " detailed environment, no characters, no people, no animals, no text, 2D illustration"
-    )
+    positive, negative = _build_bg_prompt(bg_text, exclude_en)
 
-    # 1. 로컬 GPU 시도 (VRAM 체크 포함)
+    # 1. 로컬 GPU 시도 (sd-turbo: guidance_scale=0이라 negative_prompt 효과 없음 → positive만 사용)
     pipe = _get_pipe()
     if pipe is not None:
         try:
             # SD-Turbo 스펙: 1~4 step
             image = pipe(
-                prompt=prompt,
-                num_inference_steps=2,
+                prompt=positive,
+                num_inference_steps=1,
                 guidance_scale=0.0,
                 height=512, width=512,
             ).images[0]
@@ -325,8 +349,8 @@ def generate_scene_bg(bg_text: str) -> str | None:
         except Exception as e:
             print(f"[로컬 SD BG 오류] {e} → Pollinations.ai로 폴백")
 
-    # 2. Pollinations.ai 폴백
-    return _generate_bg_pollinations(bg_text)
+    # 2. Pollinations.ai 폴백 (negative 파라미터 지원)
+    return _generate_bg_pollinations(bg_text, exclude_en)
 
 
 def _check_cuda_available():
@@ -356,7 +380,8 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
         # GPU는 순차 처리 (VRAM 초과 방지)
         for i in indices:
             try:
-                path = generate_scene_bg(scene_data[i]['bg'])
+                excl = scene_data[i].get('exclude_en') or []
+                path = generate_scene_bg(scene_data[i]['bg'], excl)
                 if path:
                     scene_data[i]['bg_image'] = path
                     print(f"[BG scene {i}] {path}")
@@ -365,9 +390,10 @@ def generate_scene_bgs_parallel(scene_data: list) -> list:
     else:
         # Pollinations 폴백: 스레딩 병렬 처리 (통신 I/O 바운드 최적화)
         print(f"[BG] Pollinations 병렬 모드 — {len(indices)}개 장면 동시 처리")
-        def _gen(idx_inner):
-            path_inner = _generate_bg_pollinations(scene_data[idx_inner]['bg'])
-            return idx_inner, path_inner
+        def _gen(i):
+            excl = scene_data[i].get('exclude_en') or []
+            path = _generate_bg_pollinations(scene_data[i]['bg'], excl)
+            return i, path
 
         with ThreadPoolExecutor(max_workers=4) as ex:
             futures = {ex.submit(_gen, i): i for i in indices}

@@ -216,6 +216,9 @@ def api_generate_story():
     if not drawings:
         return jsonify({'success': False, 'error': '그림을 찾을 수 없어요'}), 404
 
+    # korean 없는 그림 제외 (word 미연결 자유 낙서 등)
+    drawings = [d for d in drawings if d.get('korean')]
+
     # 키워드 추출 (중복 제거, 순서 유지)
     keywords = list(dict.fromkeys([d['korean'] for d in drawings]))
 
@@ -223,14 +226,16 @@ def api_generate_story():
         # 1. Gemini로 동화 생성
         story_data = ai_service.generate_fairy_tale(keywords, drawings)
 
-        # 2. HuggingFace SDXL로 장면 배경 이미지 병렬 생성
+        # 2. AI 배경 이미지 생성
+        # 아이가 그린 모든 그림의 키워드를 모든 배경에서 제외 (아이 그림이 메인 캐릭터)
         if story_data.get('scene_data'):
+            kw_to_en = {d['korean']: d.get('english', '') for d in drawings if d.get('english')}
+            # 모든 그림의 영어 키워드 목록 (전체 장면 공통 제외 목록)
+            all_exclude_en = [v for v in kw_to_en.values() if v]
+            for scene in story_data['scene_data']:
+                scene['exclude_en'] = all_exclude_en
             story_data['scene_data'] = image_service.generate_scene_bgs_parallel(
                 story_data['scene_data']
-            )
-            # 2b. 드로잉 + 배경 병합 (Flattening)
-            story_data['scene_data'] = image_service.flatten_scene_images(
-                story_data['scene_data'], drawings
             )
 
         # 3. DALL-E로 일러스트 생성 (OpenAI 키 없으면 skip)
@@ -247,13 +252,33 @@ def api_generate_story():
 
         # 6. layout_data 생성 (정확한 스프레드 배치 저장)
         scenes = story_data.get('scene_data', [])
-        num_content = max(len(drawings), len(scenes)) if scenes else len(drawings)
+        num_content = len(scenes) if scenes else len(drawings)
         
+        # 각 장면에 배치된 그림들 결정 (동사/오매칭 패턴 제외)
+        BAD_PATTERNS = {
+            '달': ['달리', '달래', '달랑', '달갑', '달콤', '달성'],
+            '집': ['집합', '집중', '집단', '집결', '집착'],
+            '배': ['배우', '배추', '배반'],
+            '별': ['별로', '별명', '별나', '별말'],
+            '산': ['산책', '산만', '산뜻'],
+            '꽃': ['꽃잎', '꽃봉', '꽃길', '꽃망울', '꽃가루'],
+            '나무': ['나무라'],
+        }
+
+        def contains_word(text, keyword):
+            """오매칭 패턴 제거 후 키워드 포함 여부 확인"""
+            if not keyword or keyword not in text:
+                return False
+            t = text
+            for bad in BAD_PATTERNS.get(keyword, []):
+                t = t.replace(bad, '▪' * len(bad))
+            return keyword in t
+
         def find_mentioned_drawings(scene_text, all_drawings):
             text = scene_text or ''
             result = []
             for d in all_drawings:
-                if d.get('korean') and d['korean'] in text:
+                if d.get('korean') and contains_word(text, d['korean']):
                     result.append(d['id'])
             return result
         
@@ -270,11 +295,13 @@ def api_generate_story():
             'sceneIdx': 0
         })
         
-        # 동화 내용 스프레드
+        # 동화 내용 스프레드 (빈 장면 스킵)
         for i in range(num_content):
             scene = scenes[i] if scenes and i < len(scenes) else None
+            if not scene or not (scene.get('text') or '').strip():
+                continue  # 텍스트 없는 장면은 페이지 생성 안 함
             mentioned_ids = []
-            if scene and scene.get('text'):
+            if scene.get('text'):
                 mentioned_ids = find_mentioned_drawings(scene['text'], drawings)
             
             primary_id = mentioned_ids[0] if len(mentioned_ids) > 0 else None
@@ -289,11 +316,37 @@ def api_generate_story():
                 'textPageNum': i + 1
             })
         
-        # 교훈 페이지 (통합 이미지 사용)
+        # 미배치 그림 후처리: 텍스트에 언급 안 된 그림을 빈 슬롯에 채움
+        assigned_ids = set()
+        for sp in layout_spreads:
+            if sp.get('primaryDrawingId'):
+                assigned_ids.add(sp['primaryDrawingId'])
+            if sp.get('secondaryDrawingId'):
+                assigned_ids.add(sp['secondaryDrawingId'])
+
+        unassigned = [d for d in drawings if d['id'] not in assigned_ids]
+        for d in unassigned:
+            placed = False
+            for sp in layout_spreads:
+                if sp.get('type') == 'content' and not sp.get('primaryDrawingId'):
+                    sp['primaryDrawingId'] = d['id']
+                    placed = True
+                    break
+            if placed:
+                continue
+            for sp in layout_spreads:
+                if sp.get('type') == 'content' and not sp.get('secondaryDrawingId'):
+                    sp['secondaryDrawingId'] = d['id']
+                    break
+
+        # 교훈 페이지 (콜라주 이미지 포함)
         layout_spreads.append({
             'type': 'moral',
             'mergedMoralImage': merged_moral_path
         })
+
+        # 종료 페이지
+        layout_spreads.append({'type': 'end'})
         
         layout_data = {'spreads': layout_spreads}
 
