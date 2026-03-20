@@ -91,6 +91,53 @@
     card.addEventListener('click', () => { if (!floatMode) toggle(card.dataset.id); });
   });
 
+  // ─── 삭제 핸들러 ────────────────────────────────────────────────
+  async function deleteDrawing(id) {
+    if (!confirm('이 그림을 삭제할까요?')) return;
+    try {
+      const res = await fetch(`/api/drawings/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        // 도감 카드 제거
+        const origCard = origCards.find(c => c.dataset.id === String(id));
+        if (origCard) origCard.remove();
+        // 둥실둥실 카드 제거
+        const physState = physCards.find(s => s.id === String(id));
+        if (physState) physState.el.remove();
+        selected.delete(String(id));
+        updateUI();
+      } else {
+        alert('삭제 중 오류가 발생했어요.');
+      }
+    } catch {
+      alert('삭제 중 오류가 발생했어요.');
+    }
+  }
+
+  // 도감 모드 액션 버튼 (수정 + 삭제)
+  origCards.forEach(card => {
+    card.querySelectorAll('.card-action-btn').forEach(btn => {
+      btn.addEventListener('click', e => e.stopPropagation());
+    });
+    const delBtn = card.querySelector('.delete-btn');
+    if (delBtn) delBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      deleteDrawing(card.dataset.id);
+    });
+  });
+
+  // 둥실둥실 모드 액션 버튼 (수정 + 삭제)
+  physCards.forEach(state => {
+    state.el.querySelectorAll('.card-action-btn').forEach(btn => {
+      btn.addEventListener('click', e => e.stopPropagation());
+    });
+    const delBtn = state.el.querySelector('.delete-btn');
+    if (delBtn) delBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      deleteDrawing(state.id);
+    });
+  });
+
   // ─── 선택 토글 ─────────────────────────────────────────────────
   function toggle(id) {
     if (selected.has(id)) {
@@ -177,101 +224,120 @@
     if (floatMode) {
       grid.style.display    = 'none';
       overlay.style.display = 'block';
+      startLoop();
     } else {
       grid.style.display    = '';
       overlay.style.display = 'none';
+      stopLoop();
     }
   }
 
   if (btnFloat) btnFloat.addEventListener('click', () => setMode('float'));
   if (btnGrid)  btnGrid.addEventListener('click',  () => setMode('grid'));
 
-  // 시작: 플로팅 모드
-  setMode('float');
+  // 창 크기 변경 시 모드 자동 전환
+  window.addEventListener('resize', () => {
+    if (window.innerWidth <= 768 && floatMode) setMode('grid');
+    else if (window.innerWidth > 768 && !floatMode) setMode('float');
+  });
 
   // ─── 물리 루프 ─────────────────────────────────────────────────
-  function tick() {
-    if (floatMode) {
-      const b = getBounds();
+  let rafId = null;
 
-      physCards.forEach(s => {
-        if (!s.ready || s.hovered) return;
-        s.x += s.vx;
-        s.y += s.vy;
-
-        if (s.x < b.left)            { s.x = b.left;            s.vx =  Math.abs(s.vx); }
-        if (s.x + CARD_W > b.right)  { s.x = b.right  - CARD_W; s.vx = -Math.abs(s.vx); }
-        if (s.y < b.top)             { s.y = b.top;             s.vy =  Math.abs(s.vy); }
-        if (s.y + CARD_H > b.bottom) { s.y = b.bottom - CARD_H; s.vy = -Math.abs(s.vy); }
-
-        s.vx *= DAMP;
-        s.vy *= DAMP;
-
-        // 최소 속도 유지
-        const spd = Math.hypot(s.vx, s.vy);
-        if (spd < 0.6) {
-          // 완전 랜덤 대신 현재 속도 방향 유지하며 가속 (더 자연스러움)
-          const ang = spd > 0.01 ? Math.atan2(s.vy, s.vx) : Math.random() * Math.PI * 2;
-          s.vx = Math.cos(ang) * SPEED;
-          s.vy = Math.sin(ang) * SPEED;
-        }
-        // 최대 속도 제한 (충돌 누적으로 인한 속도 폭발 방지)
-        else if (spd > MAX_SPEED) {
-          s.vx = s.vx / spd * MAX_SPEED;
-          s.vy = s.vy / spd * MAX_SPEED;
-        }
-      });
-
-      // 카드 간 스프링 반발 (임펄스 없이 힘만 → 다중 충돌에도 안정적)
-      for (let i = 0; i < physCards.length; i++) {
-        for (let j = i + 1; j < physCards.length; j++) {
-          const a = physCards[i], c = physCards[j];
-          if (!a.ready || !c.ready) continue;
-          const dx = (c.x + CARD_W / 2) - (a.x + CARD_W / 2);
-          const dy = (c.y + CARD_H / 2) - (a.y + CARD_H / 2);
-          const dist = Math.hypot(dx, dy);
-          const minD = RADIUS * 2;
-          if (dist < minD && dist > 0.01) {
-            const nx = dx / dist, ny = dy / dist;
-            const f = 0.55 * (1 - dist / minD); // 겹칠수록 강하게
-            if (!a.hovered) { a.vx -= nx * f; a.vy -= ny * f; }
-            if (!c.hovered) { c.vx += nx * f; c.vy += ny * f; }
-          }
-        }
-      }
-
-      // 호버 카드 주변 강한 반발 (호버 카드는 고정, 주변만 밀어냄)
-      physCards.forEach(s => {
-        if (!s.hovered || !s.ready) return;
-        const cx = s.x + CARD_W / 2, cy = s.y + CARD_H / 2;
-        physCards.forEach(o => {
-          if (o === s || !o.ready) return;
-          const dx = (o.x + CARD_W / 2) - cx;
-          const dy = (o.y + CARD_H / 2) - cy;
-          const dist = Math.hypot(dx, dy);
-          if (dist < REPEL_R && dist > 0.01) {
-            const f = REPEL_F * (1 - dist / REPEL_R);
-            o.vx += (dx / dist) * f;
-            o.vy += (dy / dist) * f;
-          }
-        });
-      });
-
-      // DOM 반영
-      physCards.forEach(s => {
-        if (!s.ready) return;
-        const scale = s.hovered ? 1.1 : 1;
-        s.el.style.transform = `translate(${s.x}px, ${s.y}px) scale(${scale})`;
-        s.el.style.zIndex    = s.hovered ? '20' : '10';
-        s.el.style.boxShadow = s.hovered
-          ? '0 16px 40px rgba(0,0,0,0.22)'
-          : (selected.has(s.id) ? '0 0 0 4px rgba(255,107,157,0.35)' : '');
-      });
-    }
-    requestAnimationFrame(tick);
+  function startLoop() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(tick);
   }
 
-  requestAnimationFrame(tick);
+  function stopLoop() {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+
+  function tick() {
+    rafId = null;
+    if (!floatMode) return; // 도감 모드면 루프 종료
+
+    const b = getBounds();
+
+    physCards.forEach(s => {
+      if (!s.ready || s.hovered) return;
+      s.x += s.vx;
+      s.y += s.vy;
+
+      if (s.x < b.left)            { s.x = b.left;            s.vx =  Math.abs(s.vx); }
+      if (s.x + CARD_W > b.right)  { s.x = b.right  - CARD_W; s.vx = -Math.abs(s.vx); }
+      if (s.y < b.top)             { s.y = b.top;             s.vy =  Math.abs(s.vy); }
+      if (s.y + CARD_H > b.bottom) { s.y = b.bottom - CARD_H; s.vy = -Math.abs(s.vy); }
+
+      s.vx *= DAMP;
+      s.vy *= DAMP;
+
+      // 최소 속도 유지
+      const spd = Math.hypot(s.vx, s.vy);
+      if (spd < 0.6) {
+        const ang = spd > 0.01 ? Math.atan2(s.vy, s.vx) : Math.random() * Math.PI * 2;
+        s.vx = Math.cos(ang) * SPEED;
+        s.vy = Math.sin(ang) * SPEED;
+      }
+      // 최대 속도 제한 (충돌 누적으로 인한 속도 폭발 방지)
+      else if (spd > MAX_SPEED) {
+        s.vx = s.vx / spd * MAX_SPEED;
+        s.vy = s.vy / spd * MAX_SPEED;
+      }
+    });
+
+    // 카드 간 스프링 반발
+    for (let i = 0; i < physCards.length; i++) {
+      for (let j = i + 1; j < physCards.length; j++) {
+        const a = physCards[i], c = physCards[j];
+        if (!a.ready || !c.ready) continue;
+        const dx = (c.x + CARD_W / 2) - (a.x + CARD_W / 2);
+        const dy = (c.y + CARD_H / 2) - (a.y + CARD_H / 2);
+        const dist = Math.hypot(dx, dy);
+        const minD = RADIUS * 2;
+        if (dist < minD && dist > 0.01) {
+          const nx = dx / dist, ny = dy / dist;
+          const f = 0.55 * (1 - dist / minD);
+          if (!a.hovered) { a.vx -= nx * f; a.vy -= ny * f; }
+          if (!c.hovered) { c.vx += nx * f; c.vy += ny * f; }
+        }
+      }
+    }
+
+    // 호버 카드 주변 강한 반발
+    physCards.forEach(s => {
+      if (!s.hovered || !s.ready) return;
+      const cx = s.x + CARD_W / 2, cy = s.y + CARD_H / 2;
+      physCards.forEach(o => {
+        if (o === s || !o.ready) return;
+        const dx = (o.x + CARD_W / 2) - cx;
+        const dy = (o.y + CARD_H / 2) - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < REPEL_R && dist > 0.01) {
+          const f = REPEL_F * (1 - dist / REPEL_R);
+          o.vx += (dx / dist) * f;
+          o.vy += (dy / dist) * f;
+        }
+      });
+    });
+
+    // DOM 반영
+    physCards.forEach(s => {
+      if (!s.ready) return;
+      const scale = s.hovered ? 1.1 : 1;
+      s.el.style.transform = `translate(${s.x}px, ${s.y}px) scale(${scale})`;
+      s.el.style.zIndex    = s.hovered ? '20' : '10';
+      s.el.style.boxShadow = s.hovered
+        ? '0 16px 40px rgba(0,0,0,0.22)'
+        : (selected.has(s.id) ? '0 0 0 4px rgba(255,107,157,0.35)' : '');
+    });
+
+    rafId = requestAnimationFrame(tick);
+  }
+
+  // 시작: 모바일(768px 이하)은 도감, 그 외는 플로팅
+  setMode(window.innerWidth <= 768 ? 'grid' : 'float');
+
 
   // ─── 동화 만들기 버튼 ──────────────────────────────────────────
   if (makeBtn) {

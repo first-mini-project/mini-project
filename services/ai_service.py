@@ -1,7 +1,101 @@
 import json
+import re
 import sys
 import os
 import random
+
+
+# ─── 한국어 조사 교정 유틸리티 ─────────────────────────────────────────────────
+
+def _has_batchim(char: str) -> bool:
+    """한글 글자에 받침이 있는지 확인합니다. (유니코드 공식 사용)"""
+    if not char:
+        return False
+    code = ord(char)
+    if 0xAC00 <= code <= 0xD7A3:
+        return (code - 0xAC00) % 28 != 0
+    return False
+
+
+def _has_rieul_batchim(char: str) -> bool:
+    """한글 글자의 받침이 ㄹ인지 확인합니다. (으로/로 구분용)"""
+    if not char:
+        return False
+    code = ord(char)
+    if 0xAC00 <= code <= 0xD7A3:
+        return (code - 0xAC00) % 28 == 8  # ㄹ은 받침 인덱스 8
+    return False
+
+
+def _fix_korean_particles(text: str) -> str:
+    """한국어 조사를 올바르게 교정합니다.
+
+    교정 항목:
+    - 은/는, 이/가, 을/를, 과/와, 으로/로, 이나/나, 이랑/랑
+    - 연속 나열 패턴: "A가 B가" → "A과/와 B가"
+    """
+    # 조사 뒤에 공백·문장부호·줄바꿈·문자열 끝이 오는 경우만 교정 (복합어 오탐 방지)
+    B = r'(?=[\s,.!?。、\n\'\"]|$)'
+
+    # ── 1단계: 연속 나열 패턴 먼저 교정 ──────────────────────────────────────
+    # "A가 B가" → "A과/와 B가",  "A이 B이" → "A과/와 B이"
+    def _fix_consecutive(m):
+        char1, space, word2, p2 = m.group(1), m.group(3), m.group(4), m.group(5)
+        conj = '과' if _has_batchim(char1) else '와'
+        return char1 + conj + space + word2 + p2
+
+    text = re.sub(r'([가-힣])(가)(\s+)([가-힣]+)(가)' + B, _fix_consecutive, text)
+    text = re.sub(r'([가-힣])(이)(\s+)([가-힣]+)(이)' + B, _fix_consecutive, text)
+
+    # ── 2단계: 개별 조사 교정 (긴 패턴 → 짧은 패턴 순서) ─────────────────────
+
+    # 이나/나
+    def _fix_ina(m):
+        char = m.group(1)
+        return char + ('이나' if _has_batchim(char) else '나')
+    text = re.sub(r'([가-힣])(이나|나)' + B, _fix_ina, text)
+
+    # 이랑/랑
+    def _fix_irang(m):
+        char = m.group(1)
+        return char + ('이랑' if _has_batchim(char) else '랑')
+    text = re.sub(r'([가-힣])(이랑|랑)' + B, _fix_irang, text)
+
+    # 으로/로 (ㄹ받침 또는 받침 없으면 → 로, 나머지 받침 → 으로)
+    def _fix_euro(m):
+        char = m.group(1)
+        if not _has_batchim(char) or _has_rieul_batchim(char):
+            return char + '로'
+        return char + '으로'
+    text = re.sub(r'([가-힣])(으로|로)' + B, _fix_euro, text)
+
+    # 은/는
+    def _fix_eun_neun(m):
+        char = m.group(1)
+        return char + ('은' if _has_batchim(char) else '는')
+    text = re.sub(r'([가-힣])([은는])' + B, _fix_eun_neun, text)
+
+    # 이/가
+    def _fix_i_ga(m):
+        char = m.group(1)
+        return char + ('이' if _has_batchim(char) else '가')
+    text = re.sub(r'([가-힣])([이가])' + B, _fix_i_ga, text)
+
+    # 을/를
+    def _fix_eul_reul(m):
+        char = m.group(1)
+        return char + ('을' if _has_batchim(char) else '를')
+    text = re.sub(r'([가-힣])([을를])' + B, _fix_eul_reul, text)
+
+    # 과/와
+    def _fix_gwa_wa(m):
+        char = m.group(1)
+        return char + ('과' if _has_batchim(char) else '와')
+    text = re.sub(r'([가-힣])([과와])' + B, _fix_gwa_wa, text)
+
+    return text
+
+
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config import Config
 
@@ -97,6 +191,20 @@ def _parse_result(response_text: str) -> dict:
         result['content'] = '\n\n'.join(s['text'] for s in result['scene_data'] if s.get('text'))
     else:
         result['scene_data'] = None
+
+    # 조사 맞춤법 교정
+    if result.get('title'):
+        result['title'] = _fix_korean_particles(result['title'])
+    if result.get('scene_data'):
+        for scene in result['scene_data']:
+            if scene.get('text'):
+                scene['text'] = _fix_korean_particles(scene['text'])
+        result['content'] = '\n\n'.join(s['text'] for s in result['scene_data'] if s.get('text'))
+    elif result.get('content'):
+        result['content'] = _fix_korean_particles(result['content'])
+    if result.get('moral'):
+        result['moral'] = _fix_korean_particles(result['moral'])
+
     return result
 
 
@@ -247,9 +355,12 @@ def _fallback_story(keywords: list) -> dict:
         {"text": f"그 소리를 듣고 마을의 모든 친구들이 모여 함께 춤을 추었어요. {kw}는 친구들과 함께라면 매일매일이 행복하다는 것을 알았어요.",
          "bg": "cheerful village square with animals celebrating together"},
     ]
+    for scene in scenes:
+        scene['text'] = _fix_korean_particles(scene['text'])
+
     return {
-        "title": f"{kw}의 모험",
+        "title": _fix_korean_particles(f"{kw}의 모험"),
         "content": '\n\n'.join(s['text'] for s in scenes),
         "scene_data": scenes,
-        "moral": "이 이야기의 교훈: 남을 도울 때 우리도 더 행복해질 수 있어요. 친절한 마음은 세상을 따뜻하게 만든답니다."
+        "moral": _fix_korean_particles("이 이야기의 교훈: 남을 도울 때 우리도 더 행복해질 수 있어요. 친절한 마음은 세상을 따뜻하게 만든답니다.")
     }

@@ -81,7 +81,8 @@ def draw_word(word_id):
     word = db.get_word(word_id)
     if not word:
         abort(404)
-    return render_template('drawing.html', word=word)
+    existing_drawing = db.get_drawing_by_word_id(word_id)
+    return render_template('drawing.html', word=word, existing_drawing=existing_drawing)
 
 
 @app.route('/collection')
@@ -95,6 +96,19 @@ def collection():
 def library():
     """내 동화 도서관"""
     stories = db.get_all_stories()
+    # 각 스토리의 그림 데이터도 함께 주입 (도서관 뷰어에서 누끼 그림 표시용)
+    for story in stories:
+        try:
+            drawing_ids = story.get('drawing_ids', [])
+            drawings = db.get_drawings_by_ids(drawing_ids) if drawing_ids else []
+            # file_path, korean, emoji 만 포함 (image_data는 용량이 커서 제외)
+            story['drawings'] = [
+                {'id': d['id'], 'korean': d['korean'], 'emoji': d.get('emoji', ''),
+                 'file_path': d.get('file_path', '')}
+                for d in drawings if d
+            ]
+        except Exception:
+            story['drawings'] = []
     return render_template('library.html', stories=stories)
 
 
@@ -123,6 +137,8 @@ def api_save_drawing():
     if not image_data.startswith('data:image/'):
         return jsonify({'success': False, 'error': '이미지 형식이 잘못됐어요'}), 400
 
+    replace_drawing_id = data.get('replace_drawing_id')
+
     try:
         header, encoded = image_data.split(',', 1)
         img_bytes = base64.b64decode(encoded)
@@ -134,6 +150,16 @@ def api_save_drawing():
             f.write(img_bytes)
 
         relative_path = f"static/generated/drawings/{filename}"
+
+        # 수정 모드: 기존 그림 삭제 후 새로 저장
+        if replace_drawing_id:
+            old = db.get_drawing_with_data(replace_drawing_id)
+            if old and old.get('file_path'):
+                old_file = os.path.join(os.path.dirname(__file__), old['file_path'])
+                if os.path.exists(old_file):
+                    os.remove(old_file)
+            db.delete_drawing(replace_drawing_id)
+
         drawing_id = db.save_drawing(word_id, image_data, relative_path)
 
         return jsonify({'success': True, 'drawing_id': drawing_id})
@@ -194,6 +220,10 @@ def api_generate_story():
             story_data['scene_data'] = image_service.generate_scene_bgs_parallel(
                 story_data['scene_data']
             )
+            # 2b. 드로잉 + 배경 병합 (Flattening)
+            story_data['scene_data'] = image_service.flatten_scene_images(
+                story_data['scene_data'], drawings
+            )
 
         # 3. DALL-E로 일러스트 생성 (OpenAI 키 없으면 skip)
         illustration_path = image_service.generate_story_illustration(
@@ -204,7 +234,62 @@ def api_generate_story():
         full_text = f"{story_data['title']}. {story_data['content']} {story_data.get('moral', '')}"
         audio_path = tts_service.generate_tts(full_text, slow=False)
 
-        # 5. DB 저장
+        # 5. layout_data 생성 (정확한 스프레드 배치 저장)
+        scenes = story_data.get('scene_data', [])
+        num_content = max(len(drawings), len(scenes)) if scenes else len(drawings)
+        
+        # 각 장면에 배치된 그림들 결정 (중복 제거하고 장면 텍스트 매칭)
+        def find_mentioned_drawings(scene_text, all_drawings):
+            """장면 텍스트에 언급된 그림들을 반환"""
+            text = scene_text or ''
+            result = []
+            for d in all_drawings:
+                if d.get('korean') and d['korean'] in text:
+                    result.append(d['id'])
+            return result
+        
+        layout_spreads = []
+        
+        # 표지
+        cover_drawing_id = drawings[0]['id'] if drawings else None
+        # 첫 번째 장면의 병합 이미지를 표지 배경으로 쓸 수도 있음 혹은 그냥 없이
+        cover_merged_image = scenes[0].get('merged_image') if scenes else None
+
+        layout_spreads.append({
+            'type': 'cover',
+            'drawingId': cover_drawing_id,
+            'mergedImage': cover_merged_image, # 표지도 병합 이미지 사용 가능하게
+            'sceneIdx': 0
+        })
+        
+        # 동화 내용 스프레드
+        for i in range(num_content):
+            scene = scenes[i] if scenes and i < len(scenes) else None
+            mentioned_ids = []
+            if scene and scene.get('text'):
+                mentioned_ids = find_mentioned_drawings(scene['text'], drawings)
+            
+            primary_id = mentioned_ids[0] if len(mentioned_ids) > 0 else None
+            secondary_id = mentioned_ids[1] if len(mentioned_ids) > 1 else None
+            
+            layout_spreads.append({
+                'type': 'content',
+                'sceneIdx': i,
+                'primaryDrawingId': primary_id,
+                'secondaryDrawingId': secondary_id,
+                'mergedImage': scene.get('merged_image') if scene else None,
+                'textPageNum': i + 1
+            })
+        
+        # 교훈 페이지
+        layout_spreads.append({'type': 'moral'})
+        
+        # 종료 페이지
+        layout_spreads.append({'type': 'end'})
+        
+        layout_data = {'spreads': layout_spreads}
+
+        # 6. DB 저장
         story_id = db.save_story(
             title=story_data['title'],
             content=story_data['content'],
@@ -213,7 +298,8 @@ def api_generate_story():
             drawing_ids=[d['id'] for d in drawings],
             illustration_path=illustration_path,
             audio_path=audio_path,
-            scene_data=story_data.get('scene_data')
+            scene_data=story_data.get('scene_data'),
+            layout_data=layout_data
         )
 
         return jsonify({'success': True, 'story_id': story_id})
@@ -252,6 +338,15 @@ def api_words():
 def api_drawings():
     drawings = db.get_all_drawings()
     return jsonify(drawings)
+
+
+@app.route('/api/drawings/<int:drawing_id>', methods=['DELETE'])
+def api_delete_drawing(drawing_id):
+    try:
+        db.delete_drawing(drawing_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':

@@ -426,6 +426,7 @@ body {
 
 .book-cover-3d {
   position: absolute; left: 50%; width: 50%; height: 100%;
+  transform-style: preserve-3d;
 }
 
 .cover-front, .cover-inside {
@@ -574,10 +575,18 @@ body {
 }
 
 /* ---------------------- ARCHIVE & TREASURE BOX ---------------------- */
-.archive-treasure-box {
+.archive-treasure-box-container {
   position: absolute;
-  bottom: 0px; 
-  right: -90px; /* Position intimately near the bottom right of the read shelf */
+  top: 0;
+  bottom: 0;
+  right: -105px; /* Safely firmly placed to the right side */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.archive-treasure-box {
   background: #fdfdfd;
   border: 4px solid #8cc541;
   border-radius: 15px;
@@ -586,7 +595,6 @@ body {
   flex-direction: column;
   align-items: center;
   cursor: pointer;
-  z-index: 50;
   box-shadow: 0 5px 0 #68992a;
   transition: box-shadow 0.1s, transform 0.1s;
 }

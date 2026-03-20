@@ -71,7 +71,8 @@ function BookCover({ book, idx, onClick, onDelete }) {
       <button className="delete-book-btn" onClick={handleDelete} title="동화책 지우기">🗑️</button>
 
       <div className="book-decoration" style={{ fontSize: styleConf.shapeSize, color: styleConf.shapeColor }}>
-        {styleConf.shape}
+        {book.coverImage && <img src={'/' + book.coverImage.replace(/^\/+/, '')} alt="" className="book-cover-image-preview" />}
+        {!book.coverImage && styleConf.shape}
       </div>
 
       <div className="book-cover-title">{book.title}</div>
@@ -141,12 +142,58 @@ function Shelf({ title, books, onBookClick, onDelete, renderEmpty, showBadges })
   );
 }
 
-// Overlaid Story Reader (Keeping existing logic, tweaking aesthetics)
+// ─── 누끼 처리 (흰 배경 → 투명) ──────────────────────────────────────────────
+function makeNukkiDataURL(img) {
+  const w = img.naturalWidth || 400;
+  const h = img.naturalHeight || 400;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const px = imageData.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const r = px[i], g = px[i+1], b = px[i+2];
+    const brightness = r * 0.299 + g * 0.587 + b * 0.114;
+    if (brightness > 248) { px[i+3] = 0; }
+    else if (brightness > 215) { px[i+3] = Math.round((248 - brightness) / 33 * 220); }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
+const SKY_KW = new Set(['별', '달', '구름', '무지개', '태양', '나비', '풍선']);
+function isSky(d) { return d && SKY_KW.has(d.korean); }
+function mentionedInScene(sceneText, drawings) {
+  const t = sceneText || '';
+  return (drawings || []).filter(d => d.korean && t.includes(d.korean));
+}
+
+// Overlaid Story Reader
 function StoryModal({ book, idx, onClose, onReadComplete }) {
   const styleConf = getVectorStyle(book.id);
   const [isOpen, setIsOpen] = useState(false);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
+  const [nukkiMap, setNukkiMap] = useState({}); // drawing_id → nukkiUrl
+
+  // 누끼 처리 — 컴포넌트 마운트 시 한 번만
+  useEffect(() => {
+    const drawings = book.drawings || [];
+    if (drawings.length === 0) return;
+    drawings.forEach(d => {
+      if (!d.file_path) return;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const url = makeNukkiDataURL(img);
+          setNukkiMap(prev => ({ ...prev, [d.id]: url }));
+        } catch(e) {}
+      };
+      img.src = '/' + d.file_path.replace(/^\/+/, '');
+    });
+  }, [book.drawings]);
 
   useEffect(() => {
     if (book.pages.length <= 1) setHasReachedEnd(true);
@@ -169,29 +216,126 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   const handleClose = () => {
     setIsOpen(false);
     setTimeout(() => {
+      if (hasReachedEnd && !book.isRead) onReadComplete(book.id);
       onClose();
-      if (!book.isRead && hasReachedEnd) onReadComplete(book.id);
-    }, 400); 
+    }, 350);
   };
 
-  const currentPageContent = book.pages[currentPageIndex]?.content_kr || "내용이 없습니다.";
+  const currentPage = book.pages[currentPageIndex] || {};
+  const currentPageContent = currentPage.content_kr || '';
+
+  // 현재 장면에 배치할 그림 결정 (storybook.js 의 mapToScenes 로직과 동일)
+  const drawings = book.drawings || [];
+  const hit = mentionedInScene(currentPage.content_kr, drawings);
+  // 언급된 그림이 없으면 페이지 인덱스 기반으로 순환 배치 (항상 그림 표시)
+  const primaryDrawing   = hit[0] || (drawings.length > 0 ? drawings[currentPageIndex % drawings.length] : null);
+  const secondaryDrawing = hit[1] || (drawings.length > 1 ? drawings[(currentPageIndex + 1) % drawings.length] : null);
+
+  function getDrawingSrc(d) {
+    if (!d) return null;
+    return nukkiMap[d.id] || (d.file_path ? '/' + d.file_path.replace(/^\/+/, '') : null);
+  }
+
+  function renderDrawing(d, style) {
+    const src = getDrawingSrc(d);
+    if (!src) return null;
+    return (
+      <img
+        src={src}
+        alt={d.korean || ''}
+        style={{ position: 'absolute', maxWidth: '60%', maxHeight: '60%', objectFit: 'contain', ...style }}
+      />
+    );
+  }
+
+  // 왼쪽 페이지: 배경 + 누끼 그림 합성
+  function renderLeftPage() {
+    const bgImage = currentPage.bgImage;
+    const bgText  = currentPage.bgText || '';
+    const mergedImage = currentPage.mergedImage;
+
+    // storybook.js 와 동일: 서버 저장 파일 우선 → Pollinations.ai 폴백
+    let bgSrc = null;
+    if (mergedImage) {
+        bgSrc = '/' + mergedImage.replace(new RegExp('^/+'), '');
+    } else if (bgImage) {
+        bgSrc = '/' + bgImage.replace(new RegExp('^/+'), '');
+    } else if (bgText) {
+      const prompt = bgText
+        + ', children storybook illustration, watercolor art style, soft pastel colors,'
+        + ' magical whimsical background scenery, no characters, no people, no animals, no text';
+      const seed = Math.abs(bgText.split('').reduce((h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0, 0)) % 999983;
+      bgSrc = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${seed}&model=flux`;
+    }
+
+    return (
+      <div style={{
+        position: 'relative', width: '100%', height: '100%',
+        overflow: 'hidden', borderRadius: '10px 0 0 10px',
+        transform: 'scaleX(-1)'
+      }}>
+        {/* 배경 — 로딩 중 스피너 표시 */}
+        {bgSrc ? (
+          <>
+            <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center',
+              background:'linear-gradient(to bottom, #87ceeb, #5cbf8a)', zIndex:0 }}>
+              <span style={{ fontSize:'2rem', opacity:0.7 }}>🎨</span>
+            </div>
+            <img src={bgSrc} alt="배경"
+              onLoad={e => { e.target.style.opacity='1'; }}
+              onError={e => { e.target.style.display='none'; }}
+              style={{ width:'100%', height:'100%', objectFit:'cover', display:'block',
+                       position:'relative', zIndex:1, opacity:0, transition:'opacity 0.4s' }} />
+          </>
+        ) : (
+          <div style={{ width: '100%', height: '100%', background: 'linear-gradient(to bottom, #87ceeb, #5cbf8a)' }} />
+        )}
+
+        {/* 그림 합성 — storybook.js 와 동일한 배치 규칙 적용 */}
+        {!mergedImage && primaryDrawing && !secondaryDrawing && (
+          isSky(primaryDrawing)
+            ? renderDrawing(primaryDrawing, { top: '8%', left: '50%', transform: 'translateX(-50%)' })
+            : renderDrawing(primaryDrawing, { bottom: '5%', left: '50%', transform: 'translateX(-50%)' })
+        )}
+        {!mergedImage && primaryDrawing && secondaryDrawing && (() => {
+          const pSky = isSky(primaryDrawing), sSky = isSky(secondaryDrawing);
+          if (!pSky && sSky) return (<>
+            {renderDrawing(primaryDrawing, { bottom: '5%', left: '20%' })}
+            {renderDrawing(secondaryDrawing, { top: '8%', right: '15%' })}
+          </>);
+          if (pSky && !sSky) return (<>
+            {renderDrawing(secondaryDrawing, { bottom: '5%', left: '20%' })}
+            {renderDrawing(primaryDrawing, { top: '8%', right: '15%' })}
+          </>);
+          if (!pSky && !sSky) return (<>
+            {renderDrawing(primaryDrawing, { bottom: '5%', left: '15%', maxWidth: '50%' })}
+            {renderDrawing(secondaryDrawing, { bottom: '5%', right: '10%', maxWidth: '38%' })}
+          </>);
+          return (<>
+            {renderDrawing(primaryDrawing, { top: '8%', left: '15%' })}
+            {renderDrawing(secondaryDrawing, { top: '8%', right: '15%' })}
+          </>);
+        })()}
+      </div>
+    );
+  }
 
   return (
     <div className="reader-overlay">
       <div className="reader-close-area" onClick={handleClose} />
-      
-      <motion.div 
-        layoutId={`book-wrapper-${book.id}`}
+      <motion.div
         className="opened-book-container"
-        initial={{ borderRadius: 4 }}
-        animate={{ borderRadius: 12 }}
-        transition={{ layout: { type: "tween", ease: [0.4, 0, 0.2, 1], duration: 0.5 } }}
+        initial={{ scale: 0.7, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.7, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        style={{ position: 'relative', zIndex: 2 }}
       >
         <div className="book-volume">
-          <div className="book-pages" style={{ left: '50%' }}>
-            <button className="close-button" onClick={handleClose}>×</button>
-            <h2 className="story-title" style={{color: styleConf.bg}}>{book.title}</h2>
-            
+          {/* Right page — Story Text */}
+          <div className="book-pages">
+            <button className="close-button" onClick={handleClose}>✕</button>
+            <h2 className="story-title">{book.title}</h2>
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentPageIndex}
@@ -212,7 +356,8 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
             </div>
           </div>
 
-          <motion.div 
+          {/* Left page — 3D flip cover → inside shows bg + drawings */}
+          <motion.div
             className="book-cover-3d"
             initial={{ rotateY: 0 }}
             animate={{ rotateY: isOpen ? -180 : 0 }}
@@ -224,9 +369,8 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
               <div className="book-decoration" style={{ fontSize: '5rem', color: styleConf.shapeColor }}>{styleConf.shape}</div>
               <h3 className="flat-title">{book.title}</h3>
             </div>
-            <div className="cover-inside flat-inside">
-              <h3>{book.title}</h3>
-              <p>나만의 도서관 📚</p>
+            <div className="cover-inside flat-inside" style={{ padding: 0, background: '#e0f2fe' }}>
+              {renderLeftPage()}
             </div>
           </motion.div>
         </div>
@@ -362,16 +506,45 @@ function BookshelfApp() {
   useEffect(() => {
     // Load ACTUAL data from server if available (injected via window object in Jinja)
     if (window.SERVER_DATA && window.SERVER_DATA.stories) {
-      const mappedStories = window.SERVER_DATA.stories.map(s => ({
-        id: s.id,
-        title: s.title,
-        coverImage: s.illustration_path,
-        isRead: Boolean(s.is_read || s.isRead),
-        pages: [
-          { page: 1, content_kr: s.content },
-          ...(s.moral ? [{ page: 2, content_kr: s.moral }] : [])
-        ]
-      }));
+      const mappedStories = window.SERVER_DATA.stories.map(s => {
+        let parsedScenes = [];
+        try {
+          parsedScenes = (typeof s.scene_data === 'string') ? JSON.parse(s.scene_data) : (s.scene_data || []);
+        } catch(e) {}
+
+        const mappedPages = [];
+        if (parsedScenes && parsedScenes.length > 0) {
+          parsedScenes.forEach((scene, i) => {
+            mappedPages.push({ 
+                page: i + 1, 
+                content_kr: scene.text, 
+                bgImage: scene.bg_image, 
+                bgText: scene.bg || '', 
+                mergedImage: scene.merged_image 
+            });
+          });
+          if (s.moral) {
+            mappedPages.push({ page: parsedScenes.length + 1, content_kr: `💡 교훈:\n${s.moral}` });
+          }
+        } else {
+          mappedPages.push({ page: 1, content_kr: s.content });
+          if (s.moral) mappedPages.push({ page: 2, content_kr: `💡 교훈:\n${s.moral}` });
+        }
+
+        // 표지 이미지는 첫 번째 장면의 병합 이미지를 우선적으로 사용
+        const coverImg = (parsedScenes && parsedScenes[0] && parsedScenes[0].merged_image) 
+                         ? parsedScenes[0].merged_image 
+                         : s.illustration_path;
+
+        return {
+          id: s.id,
+          title: s.title,
+          coverImage: coverImg,
+          isRead: Boolean(s.is_read || s.isRead),
+          pages: mappedPages,
+          drawings: s.drawings || []
+        };
+      });
       setBooks(mappedStories);
     } else {
       setBooks(DUMMY_DATA);
@@ -441,9 +614,10 @@ function BookshelfApp() {
   const unreadBooks = books.filter(b => !b.isRead);
   const allReadBooks = books.filter(b => b.isRead);
   
-  // Show only the 9 newest read books on the shelf, the rest go to archive
-  const readBooksOnShelf = allReadBooks.slice(-9); // Get last 9 read books (newest)
-  const archivedBooks = allReadBooks.slice(0, Math.max(0, allReadBooks.length - 9)); // The older ones
+  // DB는 DESC 정렬 → allReadBooks[0]=최신, allReadBooks[-1]=가장 오래된 것
+  // 선반: 최신 9권 (앞쪽), 꾸러미: 나머지 오래된 것들 (FIFO)
+  const readBooksOnShelf = allReadBooks.slice(0, 9);   // 최신 9권 → 내가 읽은 책 선반
+  const archivedBooks    = allReadBooks.slice(9);       // 오래된 것들 → 책 꾸러미
 
   return (
     <div className="bookshelf-container flat-vector-bg">
@@ -469,17 +643,19 @@ function BookshelfApp() {
         
         {/* Archive / Treasure Box Button */}
         {archivedBooks.length > 0 && (
-          <motion.div 
-            className="archive-treasure-box"
-            onClick={() => setIsArchiveOpen(true)}
-            whileHover={{ scale: 1.1, y: -5 }}
-            whileTap={{ scale: 0.95 }}
-            title={`이전 책 꾸러미 보기 (${archivedBooks.length}권)`}
-          >
-            <div className="archive-icon">📦</div>
-            <div className="archive-label">책 꾸러미</div>
-            <div className="archive-count">{archivedBooks.length}</div>
-          </motion.div>
+          <div className="archive-treasure-box-container">
+            <motion.div 
+              className="archive-treasure-box"
+              onClick={() => setIsArchiveOpen(true)}
+              whileHover={{ scale: 1.1, y: -5 }}
+              whileTap={{ scale: 0.95 }}
+              title={`이전 책 꾸러미 보기 (${archivedBooks.length}권)`}
+            >
+              <div className="archive-icon">📦</div>
+              <div className="archive-label">책 꾸러미</div>
+              <div className="archive-count">{archivedBooks.length}</div>
+            </motion.div>
+          </div>
         )}
       </div>
 

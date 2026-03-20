@@ -114,6 +114,7 @@ def init_db():
                 illustration_path TEXT,
                 audio_path TEXT,
                 scene_data TEXT,
+                layout_data TEXT,
                 is_read INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
@@ -135,6 +136,13 @@ def init_db():
     try:
         with get_db() as conn:
             conn.execute("ALTER TABLE stories ADD COLUMN is_read INTEGER DEFAULT 0")
+    except Exception:
+        pass  # 이미 존재하면 무시
+
+    # 새로운 마이그레이션: layout_data 컬럼 추가
+    try:
+        with get_db() as conn:
+            conn.execute("ALTER TABLE stories ADD COLUMN layout_data TEXT")
     except Exception:
         pass  # 이미 존재하면 무시
 
@@ -226,9 +234,23 @@ def get_all_drawings():
             SELECT d.id, d.word_id, d.file_path, d.created_at,
                    w.korean, w.english, w.emoji, w.category
             FROM drawings d JOIN words w ON d.word_id = w.id
-            ORDER BY d.created_at DESC
+            ORDER BY w.korean ASC
         ''').fetchall()
         return [dict(r) for r in rows]
+
+
+def delete_drawing(drawing_id):
+    with get_db() as conn:
+        conn.execute('DELETE FROM drawings WHERE id=?', (drawing_id,))
+
+
+def get_drawing_by_word_id(word_id):
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT * FROM drawings WHERE word_id=? ORDER BY created_at DESC LIMIT 1',
+            (word_id,)
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def get_drawing_with_data(drawing_id):
@@ -258,17 +280,18 @@ def get_drawings_by_ids(drawing_ids):
 
 
 def save_story(title, content, moral, keywords, drawing_ids,
-               illustration_path=None, audio_path=None, scene_data=None):
+               illustration_path=None, audio_path=None, scene_data=None, layout_data=None):
     with get_db() as conn:
         cursor = conn.execute(
             '''INSERT INTO stories
-               (title, content, moral, keywords, drawing_ids, illustration_path, audio_path, scene_data)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+               (title, content, moral, keywords, drawing_ids, illustration_path, audio_path, scene_data, layout_data)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (title, content, moral,
              json.dumps(keywords, ensure_ascii=False),
              json.dumps(drawing_ids),
              illustration_path, audio_path,
-             json.dumps(scene_data, ensure_ascii=False) if scene_data else None)
+             json.dumps(scene_data, ensure_ascii=False) if scene_data else None,
+             json.dumps(layout_data, ensure_ascii=False) if layout_data else None)
         )
         return cursor.lastrowid
 
@@ -282,6 +305,7 @@ def get_story(story_id):
         story['keywords'] = json.loads(story['keywords'])
         story['drawing_ids'] = json.loads(story['drawing_ids'])
         story['scene_data'] = json.loads(story['scene_data']) if story.get('scene_data') else None
+        story['layout_data'] = json.loads(story['layout_data']) if story.get('layout_data') else None
         return story
 
 
@@ -293,6 +317,7 @@ def get_all_stories():
             s = dict(row)
             s['keywords'] = json.loads(s['keywords'])
             s['drawing_ids'] = json.loads(s['drawing_ids'])
+            s['scene_data'] = json.loads(s['scene_data']) if s.get('scene_data') else None
             result.append(s)
         return result
 

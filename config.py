@@ -16,11 +16,12 @@ class Config:
     ILLUSTRATIONS_DIR = os.path.join(BASE_DIR, 'static', 'generated', 'illustrations')
     AUDIO_DIR         = os.path.join(BASE_DIR, 'static', 'audio')
     BGS_DIR           = os.path.join(BASE_DIR, 'static', 'generated', 'bgs')
+    MERGED_DIR        = os.path.join(BASE_DIR, 'static', 'generated', 'merged')
 
     MAX_SELECTED = 5
     MIN_SELECTED = 1
 
     @classmethod
     def init_dirs(cls):
-        for d in [cls.DRAWINGS_DIR, cls.ILLUSTRATIONS_DIR, cls.AUDIO_DIR, cls.BGS_DIR]:
+        for d in [cls.DRAWINGS_DIR, cls.ILLUSTRATIONS_DIR, cls.AUDIO_DIR, cls.BGS_DIR, cls.MERGED_DIR]:
             os.makedirs(d, exist_ok=True)
