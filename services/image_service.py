@@ -5,8 +5,117 @@ import base64
 import sys
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from PIL import Image, ImageOps
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config import Config
+
+# ─── 누끼 — Python PIL 버전 (흰 배경 제거) ──────────────────────────────────
+def make_nukki(img):
+    """그림의 흰색 배경을 투명하게 만듭니다."""
+    img = img.convert("RGBA")
+    datas = img.getdata()
+    newData = []
+    for item in datas:
+        # item: (r, g, b, a)
+        brightness = item[0] * 0.299 + item[1] * 0.587 + item[2] * 0.114
+        if brightness > 248:
+            newData.append((255, 255, 255, 0))
+        elif brightness > 215:
+            alpha = int((248 - brightness) / 33 * 220)
+            newData.append((item[0], item[1], item[2], alpha))
+        else:
+            newData.append(item)
+    img.putdata(newData)
+    return img
+
+_SKY_KW = {'별', '달', '구름', '무지개', '태양', '나비', '풍선'}
+def is_sky(korean):
+    return korean in _SKY_KW
+
+def flatten_scene_images(scene_data, all_drawings):
+    """
+    장면 배경과 사용자 그림을 병합하여 단일 이미지로 만듭니다.
+    - scene_data: [{'text': ..., 'bg_image': ...}, ...]
+    - all_drawings: [{'id': ..., 'korean': ..., 'file_path': ...}, ...]
+    """
+    if not scene_data or not all_drawings:
+        return scene_data
+
+    print(f"[Flattening] {len(scene_data)}개 장면 병합 시작...")
+
+    for idx, scene in enumerate(scene_data):
+        bg_path = scene.get('bg_image')
+        # 배경이 없더라도 사용자 그림을 넣기 위함 (기본 배경 또는 폴백 배경 사용 유도)
+        if not bg_path:
+            # 배경 생성 실패 시에도 빈 배경이라도 만들어 합침
+            pass 
+
+        # 장면 텍스트와 매칭되는 그림 찾기
+        text = scene.get('text', '')
+        matched = [d for d in all_drawings if d.get('korean') and d['korean'] in text]
+        
+        # 언급된 그림이 없으면 순환 배치
+        if not matched:
+            matched = [all_drawings[idx % len(all_drawings)]]
+
+        try:
+            # 배경 로딩 (없으면 하늘색/연두색 그라데이션 빈 배경 생성)
+            bg_full_path = os.path.join(Config.BASE_DIR, bg_path.replace('/', os.sep)) if bg_path else None
+            if bg_full_path and os.path.exists(bg_full_path):
+                bg_img = Image.open(bg_full_path).convert("RGBA")
+            else:
+                # 배경 파일 누락 시 폴백 배경 생성
+                bg_img = Image.new('RGBA', (512, 512), (135, 206, 235, 255)) # Sky Blue
+            
+            bg_w, bg_h = bg_img.size
+
+            # 최대 2개 그림 배치
+            drawings_to_add = matched[:2]
+            added_count = 0
+
+            for i, d in enumerate(drawings_to_add):
+                d_path = d.get('file_path')
+                if not d_path: continue
+                d_full_path = os.path.join(Config.BASE_DIR, d_path.replace('/', os.sep))
+                if not os.path.exists(d_full_path): continue
+
+                d_img = Image.open(d_full_path)
+                d_img = make_nukki(d_img)
+                
+                # 크기 조정 (배경의 60% 내외)
+                max_dim = int(min(bg_w, bg_h) * 0.6)
+                d_img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+                dw, dh = d_img.size
+
+                sky = is_sky(d.get('korean', ''))
+                px, py = 0, 0
+
+                if len(drawings_to_add) == 1:
+                    px = (bg_w - dw) // 2
+                    py = int(bg_h * 0.08) if sky else int(bg_h * 0.95 - dh)
+                else: # 2개
+                    if i == 0: # primary
+                        px = int(bg_w * 0.15)
+                        py = int(bg_h * 0.95 - dh) if not sky else int(bg_h * 0.08)
+                    else: # secondary
+                        px = int(bg_w * 0.85 - dw)
+                        py = int(bg_h * 0.95 - dh) if not sky else int(bg_h * 0.08)
+
+                bg_img.alpha_composite(d_img, (px, py))
+                added_count += 1
+
+            # 최종 저장 (단일 이미지)
+            merged_filename = f"scene_{idx}_{uuid.uuid4().hex[:8]}.jpg"
+            merged_filepath = os.path.join(Config.MERGED_DIR, merged_filename)
+            bg_img.convert("RGB").save(merged_filepath, "JPEG", quality=90)
+            
+            scene['merged_image'] = f"static/generated/merged/{merged_filename}"
+            print(f"[Flattening] 장면 {idx} 병합 완료: {merged_filename}")
+
+        except Exception as e:
+            print(f"[Flattening Error] {e}")
+
+    return scene_data
 
 # ─── 로컬 SDXL-Turbo 파이프라인 (앱 시작 시 1회 로드) ────────────────────────
 _pipe = None

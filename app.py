@@ -221,6 +221,10 @@ def api_generate_story():
             story_data['scene_data'] = image_service.generate_scene_bgs_parallel(
                 story_data['scene_data']
             )
+            # 2b. 드로잉 + 배경 병합 (Flattening)
+            story_data['scene_data'] = image_service.flatten_scene_images(
+                story_data['scene_data'], drawings
+            )
 
         # 3. DALL-E로 일러스트 생성 (OpenAI 키 없으면 skip)
         illustration_path = image_service.generate_story_illustration(
@@ -249,9 +253,13 @@ def api_generate_story():
         
         # 표지
         cover_drawing_id = drawings[0]['id'] if drawings else None
+        # 첫 번째 장면의 병합 이미지를 표지 배경으로 쓸 수도 있음 혹은 그냥 없이
+        cover_merged_image = scenes[0].get('merged_image') if scenes else None
+
         layout_spreads.append({
             'type': 'cover',
             'drawingId': cover_drawing_id,
+            'mergedImage': cover_merged_image, # 표지도 병합 이미지 사용 가능하게
             'sceneIdx': 0
         })
         
@@ -270,6 +278,7 @@ def api_generate_story():
                 'sceneIdx': i,
                 'primaryDrawingId': primary_id,
                 'secondaryDrawingId': secondary_id,
+                'mergedImage': scene.get('merged_image') if scene else None,
                 'textPageNum': i + 1
             })
         
