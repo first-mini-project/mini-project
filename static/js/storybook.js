@@ -367,16 +367,9 @@
       return 'sky';
     }
 
-    // 만약 서버에서 병합된 이미지가 있다면, 개별 드로잉 레이어링은 생략합니다.
-    const isMerged = !!(scene && scene.merged_image);
-
     let html = `<div class="scene-sky" style="background:${theme.sky};">${bgImgTag(scene)}</div>
       ${deco}
       <div class="scene-vignette"></div>`;
-
-    if (isMerged) {
-        return html;
-    }
 
     if (!primary && !secondary) {
       // 그림 없음
@@ -504,34 +497,124 @@
       </div>`;
     }
 
+    function makeMoralLeftDrawingsHTML(drawingsList, spec) {
+      const bgImgHtml = `<img src="/static/images/sketchbook.png" alt="스케치북" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:1;" onerror="this.style.display='none'">`;
+      const list = drawingsList || [];
+      const count = list.length;
+
+      if (count === 0) {
+        return `<div style="position:relative;width:100%;height:100%;background:linear-gradient(145deg,#fffde7,#fff9c4);border-radius:10px 0 0 10px;overflow:hidden;">${bgImgHtml}</div>`;
+      }
+
+      const cols = count === 1 ? 1 : 2;
+      const rows = count <= 2 ? 1 : count <= 4 ? 2 : 3;
+      const rotations = [-5, 4, -3, 6, -4];
+
+      const items = list.map((d, i) => {
+        const rot = rotations[i % rotations.length];
+        const dur = (3 + i * 0.5).toFixed(1);
+        const del = (i * 0.4).toFixed(1);
+        const spansAll = (count % 2 !== 0) && (i === count - 1) && count > 1;
+        const gridCol = spansAll ? 'grid-column:1/-1;' : '';
+        // overflow:hidden 으로 회전 시 셀 밖으로 삐져나오는 것 방지
+        const wrapStyle = `${gridCol}display:flex;align-items:center;justify-content:center;overflow:hidden;animation:float-anim ${dur}s ease-in-out ${del}s infinite;`;
+
+        if (!d.file_path) {
+          return `<div style="${wrapStyle}"><span style="font-size:2.5rem;display:block;transform:rotate(${rot}deg);">${d.emoji||'🎨'}</span></div>`;
+        }
+        const src = d.nukkiUrl || ('/' + d.file_path.replace(/^\/+/, ''));
+        // max 70%: 회전(최대 6도) 시에도 셀 안에 완전히 들어오는 크기
+        return `<div style="${wrapStyle}">
+          <img src="${src}" alt="${d.korean||''}"
+            style="max-width:70%;max-height:70%;object-fit:contain;transform:rotate(${rot}deg);filter:drop-shadow(0 3px 10px rgba(0,0,0,0.25));"
+            onerror="this.style.display='none'">
+        </div>`;
+      }).join('');
+
+      return `<div style="position:relative;width:100%;height:100%;background:linear-gradient(145deg,#fffde7,#fff9c4);border-radius:10px 0 0 10px;overflow:hidden;">
+        ${bgImgHtml}
+        <div style="position:absolute;top:20%;left:8%;right:8%;bottom:18%;z-index:3;overflow:hidden;
+                    display:grid;grid-template-columns:repeat(${cols},1fr);
+                    grid-template-rows:repeat(${rows},1fr);gap:8px;box-sizing:border-box;">
+          ${items}
+        </div>
+      </div>`;
+    }
+
+    function makeMoralAndEndRightHTML() {
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;">
+        ${SD.moral
+          ? `<div class="moral-big-icon">💡</div>
+             <div class="moral-label-text">이야기의 교훈</div>
+             <p class="moral-body">${SD.moral}</p>`
+          : `<div class="moral-big-icon">📖</div><p class="moral-body">재미있는 이야기였나요?</p>`}
+        <div style="width:100%;height:1px;background:#eee;margin:4px 0;"></div>
+        <div class="end-actions">
+          <a href="/collection" class="btn btn-yellow">✨ 새 동화 만들기</a>
+          <a href="/library"    class="btn btn-blue">📚 도서관으로</a>
+          <button class="btn btn-white" id="delete-story-btn">🗑️ 삭제</button>
+        </div>
+      </div>`;
+    }
+
     if (layoutData && layoutData.spreads && layoutData.spreads.length > 0) {
+      // 1단계: content 스펙 수집
+      const contentItems = [];
+      for (const spec of layoutData.spreads) {
+        if (spec.type === 'content') {
+          const scene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
+          const text  = (scene && scene.text) || paragraphs[spec.textPageNum - 1] || '';
+          contentItems.push({ spec, scene, text });
+        }
+      }
+
+      // 2단계: 그림 배분 계산 (모든 그림 최소 1회 보장)
+      const shownIds = new Set();
+      const assignments = contentItems.map(({ spec, text }) => {
+        let primary   = spec.primaryDrawingId   ? pDrawings.find(d => d.id === spec.primaryDrawingId)   : null;
+        let secondary = spec.secondaryDrawingId ? pDrawings.find(d => d.id === spec.secondaryDrawingId) : null;
+        if (!primary || !secondary) {
+          const hits = mentioned(text, pDrawings);
+          const used = new Set([primary && primary.id, secondary && secondary.id].filter(Boolean));
+          const extra = hits.filter(d => !used.has(d.id));
+          if (!primary   && extra.length > 0) primary   = extra[0];
+          else if (!secondary && extra.length > 0) secondary = extra[0];
+        }
+        if (primary)   shownIds.add(primary.id);
+        if (secondary) shownIds.add(secondary.id);
+        return { primary, secondary };
+      });
+
+      // 3단계: 미노출 그림을 빈 슬롯에 분배
+      for (const d of pDrawings.filter(d => !shownIds.has(d.id))) {
+        let placed = false;
+        for (const a of assignments) {
+          if (!a.secondary) { a.secondary = d; placed = true; break; }
+        }
+        if (!placed) {
+          for (const a of assignments) {
+            if (!a.primary) { a.primary = d; break; }
+          }
+        }
+      }
+
+      // 4단계: 페이지 빌드
+      let ci = 0;
       for (const spec of layoutData.spreads) {
         if (spec.type === 'cover') {
           const covScene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : (scenes ? scenes[0] : null);
           pages.push({ leftHTML: makeCoverLeftHTML(covScene), rightInnerHTML: makeCoverRightHTML() });
         } else if (spec.type === 'content') {
-          const scene = spec.sceneIdx !== undefined && scenes ? scenes[spec.sceneIdx] : null;
-          const text  = (scene && scene.text) || paragraphs[spec.textPageNum - 1] || '';
-          let primary   = spec.primaryDrawingId   ? pDrawings.find(d => d.id === spec.primaryDrawingId)   : null;
-          let secondary = spec.secondaryDrawingId ? pDrawings.find(d => d.id === spec.secondaryDrawingId) : null;
-
-          // layoutData에 없는 그림을 텍스트 언급으로 보완 (누락 방지)
-          if (!primary || !secondary) {
-            const textHits = mentioned(text, pDrawings);
-            const shownIds = new Set([primary && primary.id, secondary && secondary.id].filter(Boolean));
-            const extra = textHits.filter(d => !shownIds.has(d.id));
-            if (!primary   && extra.length > 0) primary   = extra[0];
-            else if (!secondary && extra.length > 0) secondary = extra[0];
-          }
-
+          const { scene, text } = contentItems[ci];
+          const { primary, secondary } = assignments[ci];
+          ci++;
           pages.push({
-            leftHTML:      makeDrawingPageHTML(primary, secondary, scene),
+            leftHTML:       makeDrawingPageHTML(primary, secondary, scene),
             rightInnerHTML: `<p class="story-text">${text}</p>`,
           });
         } else if (spec.type === 'moral') {
-          pages.push({ leftHTML: makeMoralLeftHTML(spec), rightInnerHTML: makeEndRightHTML() });
+          pages.push({ leftHTML: makeMoralLeftDrawingsHTML(pDrawings, spec), rightInnerHTML: makeMoralAndEndRightHTML() });
         }
-        // 'end' type은 moral에서 처리됨
       }
     } else {
       // 기존 로직 (layout_data 없는 구버전 스토리)
@@ -548,7 +631,7 @@
         });
       }
 
-      pages.push({ leftHTML: makeMoralLeftHTML(), rightInnerHTML: makeEndRightHTML() });
+      pages.push({ leftHTML: makeMoralLeftDrawingsHTML(pDrawings), rightInnerHTML: makeMoralAndEndRightHTML() });
     }
 
     // ── DOM refs ────────────────────────────────────────────────────────

@@ -1,5 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Jua&display=swap');
 
+@keyframes float-anim {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
 /* Global Reset & Container */
 body {
   margin: 0;
@@ -327,8 +332,8 @@ body {
   bottom: 25px;
   left: 50%;
   transform: translateX(-50%) !important;
-  width: 90%;
-  max-width: 460px;
+  width: 95%;
+  max-width: 600px;
   min-height: 80px;
   background: rgba(255, 255, 255, 0.98);
   backdrop-filter: blur(10px);
@@ -359,7 +364,7 @@ body {
 }
 
 .level-card.absolute-pos .level-progress-wrap {
-  width: 150px;
+  width: 220px;
   margin-top: 0;
 }
 
@@ -629,6 +634,7 @@ body {
   margin-top: 4px;
   font-size: 0.85rem;
   color: #999;
+  white-space: nowrap;
   font-weight: bold;
   text-align: right;
 }
