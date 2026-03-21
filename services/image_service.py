@@ -56,9 +56,24 @@ def flatten_scene_images(scene_data, all_drawings):
             bg_img = bg_img.resize((512, 768), Image.LANCZOS)
             bg_w, bg_h = bg_img.size
 
-            # 장면 텍스트와 매칭되는 그림 찾기
+            # 장면 텍스트와 매칭되는 그림 찾기 (BAD_PATTERNS 제외)
             text = scene.get('text', '')
-            matched = [d for d in all_drawings if d.get('korean') and d['korean'] in text]
+            BAD = {
+                '달': ['달리','달래','달랑','달갑','달콤','달성'],
+                '집': ['집합','집중','집단','집결','집착'],
+                '배': ['배우','배추','배반'],
+                '별': ['별로','별명','별나','별말'],
+                '산': ['산책','산만','산뜻'],
+                '꽃': ['꽃잎','꽃봉','꽃길','꽃망울','꽃가루'],
+                '나무': ['나무라'],
+            }
+            def _contains(t, kw):
+                if not kw or kw not in t: return False
+                s = t
+                for bad in BAD.get(kw, []):
+                    s = s.replace(bad, '▪' * len(bad))
+                return kw in s
+            matched = [d for d in all_drawings if d.get('korean') and _contains(text, d['korean'])]
             if not matched:
                 matched = [all_drawings[idx % len(all_drawings)]]
 
