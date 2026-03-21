@@ -687,32 +687,153 @@ body::before {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(255,249,230,0.95);
+  background: rgba(255,249,230,0.96);
   z-index: 300;
+  overflow: hidden;
+}
+.loading-overlay.show { display: block; }
+
+/* 상단 로딩 정보 박스 */
+.loading-info-box {
+  position: absolute;
+  top: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 10px;
   text-align: center;
-  gap: 24px;
+  pointer-events: none;
 }
-.loading-overlay.show { display: flex; }
-
 .loading-spinner {
-  width: 80px;
-  height: 80px;
-  border: 6px solid rgba(255,107,157,0.2);
+  width: 60px;
+  height: 60px;
+  border: 5px solid rgba(255,107,157,0.2);
   border-top-color: var(--pink);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
-
 .loading-emoji {
-  font-size: 3rem;
+  font-size: 2.4rem;
   animation: bounce 1s ease-in-out infinite;
 }
+.loading-text { font-size: 1.3rem; font-weight: 700; color: var(--text); }
+.loading-sub  { font-size: 0.9rem; color: #aaa; }
 
-.loading-text { font-size: 1.4rem; color: var(--text); }
-.loading-sub  { font-size: 0.95rem; color: #aaa; }
+/* 점수판 */
+.game-score-box {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  z-index: 10;
+  background: rgba(255,255,255,0.92);
+  border-radius: 20px;
+  padding: 8px 20px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #ff6b9d;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+}
+.game-score-box span {
+  display: inline-block;
+}
+@keyframes scorePulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.4); color: #ff3366; }
+  100% { transform: scale(1); }
+}
+
+/* 풍선 게임 영역 */
+.game-area {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* 하단 힌트 */
+.game-hint {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  font-size: 0.88rem;
+  color: #bbb;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 풍선 */
+@keyframes floatUp {
+  0%   { transform: translateY(0) translateX(0);    opacity: 0; }
+  6%   { opacity: 1; }
+  48%  { transform: translateY(-48vh) translateX(18px); }
+  100% { transform: translateY(-110vh) translateX(-12px); opacity: 0; }
+}
+.balloon {
+  position: absolute;
+  bottom: -90px;
+  cursor: pointer;
+  pointer-events: all;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: floatUp linear forwards;
+  z-index: 5;
+}
+.balloon-body {
+  font-size: 2.5rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18));
+  transition: transform 0.1s;
+}
+.balloon:hover .balloon-body { transform: scale(1.15); }
+.balloon-pts {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(0,0,0,0.38);
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-top: -2px;
+}
+.balloon-string {
+  width: 1.5px;
+  height: 18px;
+  background: rgba(100,80,60,0.35);
+  margin-top: 2px;
+}
+@keyframes popBurst {
+  0%   { transform: scale(1);   opacity: 1; }
+  40%  { transform: scale(1.9); opacity: 0.6; }
+  100% { transform: scale(0);   opacity: 0; }
+}
+/* JS가 body에 position:fixed로 붙이는 팝 이펙트 */
+.balloon-pop {
+  font-size: 2.5rem;
+  line-height: 1;
+  pointer-events: none;
+  animation: popBurst 0.28s ease-out forwards;
+  z-index: 9999;
+}
+
+/* 팝 점수 텍스트 — JS가 body에 position:fixed로 붙임 */
+@keyframes scoreFloat {
+  0%   { transform: translateY(0);    opacity: 1; }
+  100% { transform: translateY(-70px); opacity: 0; }
+}
+.score-popup {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: #ff6b9d;
+  pointer-events: none;
+  animation: scoreFloat 0.85s ease-out forwards;
+  z-index: 9999;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.18);
+}
 
 /* ─── 도서관 ────────────────────────────────────────────────────────────────── */
 .library-page { position: relative; z-index: 1; padding-bottom: 40px; }

@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 동화 만들기 — 기술 스택 발표자료</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+      background: #f5f0ff;
+      color: #222;
+      padding: 40px 20px 80px;
+    }
+
+    /* ── 헤더 ───────────────────────────────────────── */
+    .hero {
+      text-align: center;
+      padding: 56px 24px 48px;
+      background: linear-gradient(135deg, #7c3aed, #db2777);
+      border-radius: 24px;
+      color: #fff;
+      margin-bottom: 48px;
+      box-shadow: 0 8px 32px rgba(124,58,237,0.3);
+    }
+    .hero-emoji { font-size: 4rem; margin-bottom: 16px; }
+    .hero h1   { font-size: 2.4rem; font-weight: 900; margin-bottom: 10px; }
+    .hero p    { font-size: 1.1rem; opacity: 0.88; }
+    .badge-row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+    .badge {
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    /* ── 섹션 레이아웃 ──────────────────────────────── */
+    .section { margin-bottom: 48px; }
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 900;
+      color: #5b21b6;
+      margin-bottom: 20px;
+      padding-left: 14px;
+      border-left: 5px solid #7c3aed;
+    }
+
+    /* ── 카드 그리드 ────────────────────────────────── */
+    .grid { display: grid; gap: 16px; }
+    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 22px 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      border-top: 4px solid #7c3aed;
+    }
+    .card.pink   { border-top-color: #db2777; }
+    .card.blue   { border-top-color: #2563eb; }
+    .card.green  { border-top-color: #059669; }
+    .card.orange { border-top-color: #d97706; }
+    .card.teal   { border-top-color: #0891b2; }
+    .card.red    { border-top-color: #dc2626; }
+
+    .card-emoji  { font-size: 2rem; margin-bottom: 10px; }
+    .card-name   { font-size: 1.1rem; font-weight: 800; margin-bottom: 4px; }
+    .card-ver    { font-size: 0.8rem; font-weight: 700; color: #7c3aed; background: #f0e9ff; display: inline-block; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+    .card-desc   { font-size: 0.88rem; color: #555; line-height: 1.6; }
+    .card-role   { font-size: 0.8rem; color: #888; margin-top: 8px; font-style: italic; }
+
+    /* ── AI 모델 테이블 ─────────────────────────────── */
+    .model-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+    .model-table th {
+      background: linear-gradient(135deg, #7c3aed, #db2777);
+      color: #fff;
+      padding: 14px 18px;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+    .model-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 0.9rem;
+      vertical-align: middle;
+    }
+    .model-table tr:last-child td { border-bottom: none; }
+    .model-table tr:hover td { background: #faf5ff; }
+    .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .tag-primary  { background: #ede9fe; color: #7c3aed; }
+    .tag-fallback { background: #fce7f3; color: #db2777; }
+    .tag-free     { background: #d1fae5; color: #059669; }
+    .tag-paid     { background: #fef3c7; color: #d97706; }
+    .tag-local    { background: #dbeafe; color: #2563eb; }
+
+    /* ── 흐름도 ─────────────────────────────────────── */
+    .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
+    .flow-step {
+      background: #fff;
+      border-radius: 14px;
+      padding: 16px 20px;
+      text-align: center;
+      min-width: 130px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      flex: 1;
+    }
+    .flow-step .fs-emoji { font-size: 1.8rem; margin-bottom: 6px; }
+    .flow-step .fs-title { font-size: 0.82rem; font-weight: 800; color: #5b21b6; }
+    .flow-step .fs-sub   { font-size: 0.73rem; color: #888; margin-top: 3px; }
+    .flow-arrow { font-size: 1.4rem; color: #c4b5fd; padding: 0 4px; flex-shrink: 0; }
+
+    /* ── API 키 표 ─────────────────────────────────── */
+    .apikey-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+    .apikey-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .apikey-icon { font-size: 1.8rem; flex-shrink: 0; }
+    .apikey-name { font-size: 0.95rem; font-weight: 800; margin-bottom: 3px; }
+    .apikey-where { font-size: 0.78rem; color: #888; }
+    .apikey-note { font-size: 0.76rem; color: #059669; font-weight: 700; margin-top: 4px; }
+    .apikey-note.paid { color: #d97706; }
+
+    /* ── 하이라이트 박스 ─────────────────────────────── */
+    .highlight-box {
+      background: linear-gradient(135deg, #fdf4ff, #fce7f3);
+      border: 2px solid #e879f9;
+      border-radius: 16px;
+      padding: 24px 28px;
+      margin-bottom: 20px;
+    }
+    .highlight-box h3 { font-size: 1.1rem; font-weight: 900; color: #9333ea; margin-bottom: 12px; }
+    .highlight-box ul { padding-left: 20px; }
+    .highlight-box li { font-size: 0.9rem; color: #555; line-height: 2; }
+    .highlight-box li strong { color: #7c3aed; }
+
+    /* ── 통계 ─────────────────────────────────────── */
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+    .stat-card {
+      background: linear-gradient(135deg, #7c3aed, #9333ea);
+      border-radius: 16px;
+      padding: 22px 20px;
+      text-align: center;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.3);
+    }
+    .stat-num  { font-size: 2.2rem; font-weight: 900; }
+    .stat-unit { font-size: 0.8rem; opacity: 0.8; margin-top: 4px; }
+
+    /* ── 팀 특별 기능 ───────────────────────────────── */
+    .feature-list { list-style: none; padding: 0; display: grid; gap: 12px; }
+    .feature-item {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .feature-item .fi-icon { font-size: 1.5rem; flex-shrink: 0; }
+    .feature-item .fi-title { font-size: 0.95rem; font-weight: 800; margin-bottom: 3px; }
+    .feature-item .fi-desc  { font-size: 0.82rem; color: #666; line-height: 1.5; }
+
+    /* ── 반응형 ────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .hero h1 { font-size: 1.7rem; }
+      .flow { flex-direction: column; }
+      .flow-arrow { transform: rotate(90deg); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ 헤더 ════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-emoji">📚✨</div>
+  <h1>AI 동화 만들기</h1>
+  <p>아이들이 직접 그린 그림으로 나만의 동화를 만드는 웹 서비스</p>
+  <div class="badge-row">
+    <span class="badge">🐍 Python 3.13</span>
+    <span class="badge">🌐 Flask 3.1</span>
+    <span class="badge">🤖 Gemini 2.5 Flash Lite</span>
+    <span class="badge">🎨 Pollinations AI</span>
+    <span class="badge">🔊 Edge TTS</span>
+  </div>
+</div>
+
+<!-- ══ 핵심 수치 ══════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">📊 프로젝트 규모</div>
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num">3</div>
+      <div class="stat-unit">AI 모델 연동</div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #db2777, #e11d48);">
+      <div class="stat-num">6</div>
+      <div class="stat-unit">주요 라이브러리</div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #059669, #10b981);">
+      <div class="stat-num">0</div>
+      <div class="stat-unit">프레임워크 (Vanilla JS)</div>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #d97706, #f59e0b);">
+      <div class="stat-num">4</div>
+      <div class="stat-unit">주요 페이지</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 백엔드 기술 ══════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">⚙️ 백엔드 (Server-Side)</div>
+  <div class="grid grid-3">
+    <div class="card">
+      <div class="card-emoji">🐍</div>
+      <div class="card-name">Python</div>
+      <div class="card-ver">v3.13.12</div>
+      <div class="card-desc">서버 메인 언어. 비동기 처리 및 AI API 호출 담당.</div>
+    </div>
+    <div class="card blue">
+      <div class="card-emoji">🌐</div>
+      <div class="card-name">Flask</div>
+      <div class="card-ver">v3.1.3</div>
+      <div class="card-desc">경량 웹 프레임워크. 라우팅, SSR 템플릿(Jinja2), REST API 제공.</div>
+    </div>
+    <div class="card green">
+      <div class="card-emoji">🗄️</div>
+      <div class="card-name">SQLite + Python sqlite3</div>
+      <div class="card-ver">내장 모듈</div>
+      <div class="card-desc">별도 DB 서버 없이 로컬 파일 기반 DB. 단어·그림·동화 저장.</div>
+    </div>
+    <div class="card orange">
+      <div class="card-emoji">🧩</div>
+      <div class="card-name">Jinja2 (Flask 내장)</div>
+      <div class="card-ver">v3.x</div>
+      <div class="card-desc">서버사이드 HTML 렌더링. 동화 데이터를 템플릿에 주입.</div>
+    </div>
+    <div class="card teal">
+      <div class="card-emoji">🔑</div>
+      <div class="card-name">python-dotenv</div>
+      <div class="card-ver">v1.2.2</div>
+      <div class="card-desc">.env 파일로 API 키 등 민감 정보를 환경변수로 분리 관리.</div>
+    </div>
+    <div class="card pink">
+      <div class="card-emoji">🖼️</div>
+      <div class="card-name">Pillow</div>
+      <div class="card-ver">v12.0.0</div>
+      <div class="card-desc">이미지 처리 라이브러리. 그림 파일 합성 및 저장.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 프론트엔드 기술 ═══════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🎨 프론트엔드 (Client-Side)</div>
+  <div class="grid grid-3">
+    <div class="card">
+      <div class="card-emoji">📄</div>
+      <div class="card-name">HTML5 + CSS3</div>
+      <div class="card-ver">표준</div>
+      <div class="card-desc">시맨틱 마크업, CSS 변수, Flexbox/Grid, 미디어 쿼리로 반응형 구현.</div>
+    </div>
+    <div class="card blue">
+      <div class="card-emoji">⚡</div>
+      <div class="card-name">Vanilla JavaScript (ES6+)</div>
+      <div class="card-ver">프레임워크 없음</div>
+      <div class="card-desc">React·Vue 없이 순수 JS만 사용. fetch API, async/await, MutationObserver 등 활용.</div>
+    </div>
+    <div class="card green">
+      <div class="card-emoji">🖌️</div>
+      <div class="card-name">Canvas API</div>
+      <div class="card-ver">HTML5 내장</div>
+      <div class="card-desc">브라우저 내장 그림판 구현. 그리기·지우기·실행 취소·색상 선택 기능.</div>
+    </div>
+    <div class="card orange">
+      <div class="card-emoji">🎈</div>
+      <div class="card-name">requestAnimationFrame</div>
+      <div class="card-ver">Web API</div>
+      <div class="card-desc">그림 모음장의 물리 기반 플로팅 애니메이션. cancelAnimationFrame으로 배터리 절약.</div>
+    </div>
+    <div class="card teal">
+      <div class="card-emoji">📱</div>
+      <div class="card-name">반응형 디자인</div>
+      <div class="card-ver">CSS Media Query</div>
+      <div class="card-desc">≤768px 모바일에서 플로팅 모드 자동 전환, 2열 그리드 레이아웃.</div>
+    </div>
+    <div class="card pink">
+      <div class="card-emoji">🎮</div>
+      <div class="card-name">풍선 터트리기 미니게임</div>
+      <div class="card-ver">자체 구현</div>
+      <div class="card-desc">동화 생성 대기 중 플레이. 14종 풍선, 가중치 랜덤, 점수 시스템.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ AI 모델 상세 ══════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🤖 AI 모델 & API 상세</div>
+  <table class="model-table">
+    <thead>
+      <tr>
+        <th>기능</th>
+        <th>모델 / 서비스</th>
+        <th>버전 / 엔진</th>
+        <th>구분</th>
+        <th>특징</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>📖 <strong>동화 생성 (메인)</strong></td>
+        <td>Google Gemini</td>
+        <td>gemini-2.5-flash-lite</td>
+        <td><span class="tag tag-primary">Primary</span> <span class="tag tag-free">무료티어</span></td>
+        <td>빠른 응답, 한국어 품질 우수</td>
+      </tr>
+      <tr>
+        <td>📖 <strong>동화 생성 (폴백)</strong></td>
+        <td>Anthropic Claude</td>
+        <td>claude-sonnet-4-6</td>
+        <td><span class="tag tag-fallback">Fallback</span> <span class="tag tag-paid">유료</span></td>
+        <td>Gemini 실패 시 자동 전환</td>
+      </tr>
+      <tr>
+        <td>🖼️ <strong>배경 이미지 생성 (메인)</strong></td>
+        <td>Pollinations.ai</td>
+        <td>Flux 모델</td>
+        <td><span class="tag tag-primary">Primary</span> <span class="tag tag-free">무료</span></td>
+        <td>GPU 없이 무료 API, 장면별 배경 이미지</td>
+      </tr>
+      <tr>
+        <td>🖼️ <strong>배경 이미지 생성 (로컬)</strong></td>
+        <td>SD-Turbo (Stability AI)</td>
+        <td>sd-turbo (FP16)</td>
+        <td><span class="tag tag-local">로컬 GPU</span></td>
+        <td>CUDA GPU 보유 시 자동 전환, ~2GB VRAM 필요</td>
+      </tr>
+      <tr>
+        <td>🎨 <strong>참고 이미지 생성</strong></td>
+        <td>Hugging Face Inference</td>
+        <td>SDXL-base-1.0</td>
+        <td><span class="tag tag-free">무료티어</span></td>
+        <td>그림 그릴 때 참고용 이미지 제공</td>
+      </tr>
+      <tr>
+        <td>🔊 <strong>TTS 음성 합성 (메인)</strong></td>
+        <td>Microsoft Edge TTS</td>
+        <td>edge-tts v7.2.7</td>
+        <td><span class="tag tag-primary">Primary</span> <span class="tag tag-free">무료</span></td>
+        <td>내레이션(여성) + 대화(남성) 멀티보이스</td>
+      </tr>
+      <tr>
+        <td>🔊 <strong>TTS 음성 합성 (폴백)</strong></td>
+        <td>Google TTS (gTTS)</td>
+        <td>gTTS v2.5.4</td>
+        <td><span class="tag tag-fallback">Fallback</span> <span class="tag tag-free">무료</span></td>
+        <td>Edge TTS 실패 시 단일 목소리로 폴백</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ══ 동화 생성 흐름 ═══════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🔄 동화 생성 흐름</div>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="fs-emoji">🎨</div>
+      <div class="fs-title">그림 그리기</div>
+      <div class="fs-sub">Canvas API<br>PNG 저장</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="fs-emoji">✅</div>
+      <div class="fs-title">그림 선택</div>
+      <div class="fs-sub">1~5개<br>키워드 추출</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="fs-emoji">🤖</div>
+      <div class="fs-title">AI 동화 생성</div>
+      <div class="fs-sub">Gemini 2.5<br>Flash Lite</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="fs-emoji">🖼️</div>
+      <div class="fs-title">배경 이미지</div>
+      <div class="fs-sub">Pollinations<br>Flux 모델</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="fs-emoji">🔊</div>
+      <div class="fs-title">TTS 변환</div>
+      <div class="fs-sub">Edge TTS<br>멀티보이스</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="fs-emoji">📖</div>
+      <div class="fs-title">동화책 완성</div>
+      <div class="fs-sub">이미지+음성<br>페이지 뷰어</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 주요 기능 하이라이트 ══════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">⭐ 주요 구현 기능</div>
+  <ul class="feature-list">
+    <li class="feature-item">
+      <span class="fi-icon">🎨</span>
+      <div>
+        <div class="fi-title">웹 그림판 (Canvas API)</div>
+        <div class="fi-desc">브라우저에서 직접 그리기 · 지우기 · 색상 팔레트 · 실행 취소(Ctrl+Z) · 그림 저장. 기존 그림 불러와서 수정 가능.</div>
+      </div>
+    </li>
+    <li class="feature-item">
+      <span class="fi-icon">📚</span>
+      <div>
+        <div class="fi-title">동화책 뷰어 (스토리북)</div>
+        <div class="fi-desc">페이지 넘기기, 장면별 배경 이미지, 그림 플로팅 애니메이션, TTS 재생 버튼. 기승전결 4단락 구조로 AI가 자동 생성.</div>
+      </div>
+    </li>
+    <li class="feature-item">
+      <span class="fi-icon">🎈</span>
+      <div>
+        <div class="fi-title">물리 기반 플로팅 애니메이션</div>
+        <div class="fi-desc">그림 모음장에서 카드가 중력·반발력·마우스 인력으로 실시간 움직임. requestAnimationFrame 기반, 모바일에서는 자동으로 그리드 모드 전환 (배터리 절약).</div>
+      </div>
+    </li>
+    <li class="feature-item">
+      <span class="fi-icon">🔊</span>
+      <div>
+        <div class="fi-title">멀티보이스 TTS</div>
+        <div class="fi-desc">내레이션: 여성 목소리(ko-KR-SunHiNeural) / 캐릭터 대화("...") : 남성 목소리(ko-KR-InJoonNeural). MP3 세그먼트 연결 방식으로 ffmpeg 없이 구현.</div>
+      </div>
+    </li>
+    <li class="feature-item">
+      <span class="fi-icon">🌐</span>
+      <div>
+        <div class="fi-title">자동 폴백 구조 (이중 안전망)</div>
+        <div class="fi-desc">동화 생성: Gemini → Claude / 배경 이미지: 로컬 GPU → Pollinations.ai / TTS: Edge TTS → gTTS. 어느 API가 실패해도 서비스 중단 없음.</div>
+      </div>
+    </li>
+    <li class="feature-item">
+      <span class="fi-icon">🤖</span>
+      <div>
+        <div class="fi-title">한국어 조사 자동 교정</div>
+        <div class="fi-desc">AI 생성 텍스트의 은/는, 이/가, 을/를, 으로/로 등 조사 오류를 유니코드 받침 분석으로 자동 수정. 정규식 + 한글 유니코드 공식 활용.</div>
+      </div>
+    </li>
+    <li class="feature-item">
+      <span class="fi-icon">🎮</span>
+      <div>
+        <div class="fi-title">로딩 중 풍선 미니게임</div>
+        <div class="fi-desc">동화 생성 대기(약 15~30초) 동안 14종 풍선 터트리기 게임 자동 실행. 가중치 랜덤 등장, 크기·속도 무작위, 점수 시스템. MutationObserver로 로딩 상태 감지.</div>
+      </div>
+    </li>
+  </ul>
+</div>
+
+<!-- ══ API 키 정리 ══════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">🔑 필요한 API 키</div>
+  <div class="apikey-grid">
+    <div class="apikey-card">
+      <div class="apikey-icon">🟦</div>
+      <div>
+        <div class="apikey-name">GEMINI_API_KEY</div>
+        <div class="apikey-where">Google AI Studio (aistudio.google.com)</div>
+        <div class="apikey-note">무료 티어 사용 가능 (메인 동화 생성)</div>
+      </div>
+    </div>
+    <div class="apikey-card">
+      <div class="apikey-icon">🟤</div>
+      <div>
+        <div class="apikey-name">ANTHROPIC_API_KEY</div>
+        <div class="apikey-where">Anthropic Console (console.anthropic.com)</div>
+        <div class="apikey-note paid">유료 (폴백용, 필수 아님)</div>
+      </div>
+    </div>
+    <div class="apikey-card">
+      <div class="apikey-icon">🟩</div>
+      <div>
+        <div class="apikey-name">OPENAI_API_KEY</div>
+        <div class="apikey-where">OpenAI Platform (platform.openai.com)</div>
+        <div class="apikey-note paid">유료 (DALL-E 3, 선택사항)</div>
+      </div>
+    </div>
+    <div class="apikey-card">
+      <div class="apikey-icon">🟨</div>
+      <div>
+        <div class="apikey-name">HUGGINGFACE_API_KEY</div>
+        <div class="apikey-where">Hugging Face (huggingface.co)</div>
+        <div class="apikey-note">무료 티어 사용 가능 (참고 이미지)</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top: 14px; padding: 14px 18px; background: #fffbeb; border-radius: 12px; border-left: 4px solid #f59e0b; font-size: 0.85rem; color: #555;">
+    💡 <strong>Pollinations.ai</strong>와 <strong>Edge TTS</strong>는 API 키 없이 무료로 사용 가능합니다. 최소 <strong>GEMINI_API_KEY</strong> 하나만 있으면 핵심 기능 동작.
+  </div>
+</div>
+
+<!-- ══ 의존성 전체 목록 ═════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">📦 Python 패키지 (requirements.txt)</div>
+  <div class="grid grid-2">
+    <div class="card">
+      <div class="card-name">핵심 패키지</div>
+      <div style="margin-top: 12px; display: grid; gap: 8px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🌐 Flask</span><span style="color:#7c3aed; font-weight:700;">3.1.3</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🤖 google-genai</span><span style="color:#7c3aed; font-weight:700;">1.68.0</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🤖 anthropic</span><span style="color:#7c3aed; font-weight:700;">0.85.0</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🤖 openai</span><span style="color:#7c3aed; font-weight:700;">2.29.0</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🔊 edge-tts</span><span style="color:#7c3aed; font-weight:700;">7.2.7</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🔊 gTTS</span><span style="color:#7c3aed; font-weight:700;">2.5.4</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🌐 requests</span><span style="color:#7c3aed; font-weight:700;">2.32.5</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🔑 python-dotenv</span><span style="color:#7c3aed; font-weight:700;">1.2.2</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0;">
+          <span>🖼️ Pillow</span><span style="color:#7c3aed; font-weight:700;">12.0.0</span>
+        </div>
+      </div>
+    </div>
+    <div class="card blue">
+      <div class="card-name">로컬 이미지 생성 (GPU 선택)</div>
+      <div style="margin-top: 12px; display: grid; gap: 8px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🔥 torch (CUDA)</span><span style="color:#2563eb; font-weight:700;">CUDA 12.1 권장</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🎨 diffusers</span><span style="color:#2563eb; font-weight:700;">0.37.0</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0; border-bottom: 1px solid #f5f5f5;">
+          <span>🤗 transformers</span><span style="color:#2563eb; font-weight:700;">4.x</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:0.88rem; padding: 6px 0;">
+          <span>⚡ accelerate</span><span style="color:#2563eb; font-weight:700;">0.20.0</span>
+        </div>
+      </div>
+      <div style="margin-top: 14px; padding: 10px 14px; background: #dbeafe; border-radius: 10px; font-size: 0.78rem; color: #1e40af;">
+        ⚠️ GPU(CUDA) 없으면 자동으로 Pollinations.ai로 폴백. GPU 없어도 서비스 완전 동작.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 발표 포인트 ═══════════════════════════════════════════ -->
+<div class="section">
+  <div class="highlight-box">
+    <h3>🎯 발표 시 강조 포인트</h3>
+    <ul>
+      <li><strong>무료로 구동 가능</strong> — Gemini API 무료 티어 + Pollinations.ai + Edge TTS 조합으로 비용 0원</li>
+      <li><strong>이중 폴백 구조</strong> — 어느 AI API가 실패해도 서비스 중단 없이 자동 전환</li>
+      <li><strong>프레임워크 없는 프론트엔드</strong> — React/Vue 없이 Vanilla JS로 물리 애니메이션·게임 구현</li>
+      <li><strong>멀티보이스 TTS</strong> — ffmpeg 없이 MP3 바이트 연결로 내레이션/캐릭터 목소리 분리</li>
+      <li><strong>한국어 조사 자동 교정</strong> — 유니코드 받침 분석으로 AI 생성 텍스트 품질 향상</li>
+      <li><strong>UX 배려</strong> — 긴 로딩 중 미니게임 제공, 모바일 반응형, 배터리 절약 애니메이션</li>
+    </ul>
+  </div>
+</div>
+
+<div style="text-align:center; color:#aaa; font-size:0.82rem; margin-top: 40px;">
+  AI 동화 만들기 프로젝트 · 기술 스택 발표자료 · 2025
+</div>
+
+</body>
+</html>
