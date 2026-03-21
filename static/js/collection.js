@@ -20,12 +20,12 @@
   // ─── 물리 상수 ─────────────────────────────────────────────────
   const CARD_W      = 160;
   const CARD_H      = 205;
-  const RADIUS      = 70;    // 충돌 반지름 (작게 → 자연스럽게 살짝 겹침 허용)
-  const SPEED       = 1.35;  // 기본 속도
-  const MAX_SPEED   = 3.8;   // 최대 속도 (폭발 방지)
+  const RADIUS      = 70;    // 충돌 반지름
+  const SPEED       = 0.7;   // 기본 속도 (느리게)
+  const MAX_SPEED   = 1.8;   // 최대 속도
   const DAMP        = 0.999; // 감속 계수
   const REPEL_R     = 220;   // 호버 반발 영향 범위 (px)
-  const REPEL_F     = 1.2;   // 호버 반발력 강도
+  const REPEL_F     = 1.0;   // 호버 반발력 강도
 
   // ─── 플로팅 오버레이 ────────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -79,10 +79,19 @@
       el, id: orig.dataset.id,
       x: 0, y: 0, vx: 0, vy: 0,
       hovered: false, ready: false,
+      dragging: false, dragOffsetX: 0, dragOffsetY: 0, wasJustDragged: false,
     };
-    el.addEventListener('click',      () => { if (floatMode) toggle(state.id); });
-    el.addEventListener('mouseenter', () => { state.hovered = true;  });
-    el.addEventListener('mouseleave', () => { state.hovered = false; });
+    el.addEventListener('click',      () => {
+      if (state.wasJustDragged) { state.wasJustDragged = false; return; }
+      if (floatMode) toggle(state.id);
+    });
+    el.addEventListener('mouseenter', () => { if (!state.dragging) state.hovered = true;  });
+    el.addEventListener('mouseleave', () => { if (!state.dragging) state.hovered = false; });
+    el.addEventListener('mousedown',  (e) => {
+      if (e.button !== 0 || !floatMode || !state.ready) return;
+      e.preventDefault();
+      dragStart(state, e.clientX, e.clientY);
+    });
     return state;
   });
 
@@ -241,6 +250,54 @@
     else if (window.innerWidth > 768 && !floatMode) setMode('float');
   });
 
+  // ─── 드래그 핸들러 ─────────────────────────────────────────────
+  let dragging   = null;    // 현재 드래그 중인 state
+  let dragMoved  = false;
+  let prevMX = 0, prevMY = 0, lastMX = 0, lastMY = 0;
+
+  function dragStart(state, cx, cy) {
+    dragging  = state;
+    dragMoved = false;
+    state.dragOffsetX = cx - state.x;
+    state.dragOffsetY = cy - state.y;
+    prevMX = lastMX = cx;
+    prevMY = lastMY = cy;
+    state.hovered = true;
+    overlay.style.cursor = 'grabbing';
+  }
+
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - (dragging.x + dragging.dragOffsetX);
+    const dy = e.clientY - (dragging.y + dragging.dragOffsetY);
+    if (!dragMoved && Math.hypot(dx, dy) > 5) dragMoved = true;
+
+    if (dragMoved) {
+      dragging.dragging = true;
+      prevMX = lastMX; prevMY = lastMY;
+      lastMX = e.clientX; lastMY = e.clientY;
+      const b = getBounds();
+      dragging.x = Math.max(b.left, Math.min(e.clientX - dragging.dragOffsetX, b.right  - CARD_W));
+      dragging.y = Math.max(b.top,  Math.min(e.clientY - dragging.dragOffsetY, b.bottom - CARD_H));
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    if (dragging.dragging) {
+      // 드래그 해제 속도 부여 (마지막 두 프레임 기준)
+      const velScale = 0.45;
+      dragging.vx = Math.max(-MAX_SPEED, Math.min((lastMX - prevMX) * velScale, MAX_SPEED));
+      dragging.vy = Math.max(-MAX_SPEED, Math.min((lastMY - prevMY) * velScale, MAX_SPEED));
+      dragging.dragging    = false;
+      dragging.wasJustDragged = true;
+    }
+    dragging.hovered = false;
+    overlay.style.cursor = '';
+    dragging = null;
+    dragMoved = false;
+  });
+
   // ─── 물리 루프 ─────────────────────────────────────────────────
   let rafId = null;
 
@@ -260,7 +317,7 @@
     const b = getBounds();
 
     physCards.forEach(s => {
-      if (!s.ready || s.hovered) return;
+      if (!s.ready || s.hovered || s.dragging) return;
       s.x += s.vx;
       s.y += s.vy;
 
@@ -274,12 +331,12 @@
 
       // 최소 속도 유지
       const spd = Math.hypot(s.vx, s.vy);
-      if (spd < 0.6) {
+      if (spd < 0.3) {
         const ang = spd > 0.01 ? Math.atan2(s.vy, s.vx) : Math.random() * Math.PI * 2;
         s.vx = Math.cos(ang) * SPEED;
         s.vy = Math.sin(ang) * SPEED;
       }
-      // 최대 속도 제한 (충돌 누적으로 인한 속도 폭발 방지)
+      // 최대 속도 제한
       else if (spd > MAX_SPEED) {
         s.vx = s.vx / spd * MAX_SPEED;
         s.vy = s.vy / spd * MAX_SPEED;
@@ -324,12 +381,16 @@
     // DOM 반영
     physCards.forEach(s => {
       if (!s.ready) return;
-      const scale = s.hovered ? 1.1 : 1;
+      const active = s.hovered || s.dragging;
+      const scale  = active ? 1.08 : 1;
       s.el.style.transform = `translate(${s.x}px, ${s.y}px) scale(${scale})`;
-      s.el.style.zIndex    = s.hovered ? '20' : '10';
-      s.el.style.boxShadow = s.hovered
-        ? '0 16px 40px rgba(0,0,0,0.22)'
-        : (selected.has(s.id) ? '0 0 0 4px rgba(255,107,157,0.35)' : '');
+      s.el.style.zIndex    = s.dragging ? '30' : (active ? '20' : '10');
+      s.el.style.cursor    = s.dragging ? 'grabbing' : 'pointer';
+      s.el.style.boxShadow = s.dragging
+        ? '0 24px 56px rgba(0,0,0,0.28)'
+        : (active
+          ? '0 16px 40px rgba(0,0,0,0.22)'
+          : (selected.has(s.id) ? '0 0 0 4px rgba(255,107,157,0.35)' : ''));
     });
 
     rafId = requestAnimationFrame(tick);

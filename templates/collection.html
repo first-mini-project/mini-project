@@ -70,10 +70,19 @@
 {% endif %}
 
 <div class="loading-overlay" id="loading-overlay">
-  <div class="loading-emoji">✨</div>
-  <div class="loading-spinner"></div>
-  <div class="loading-text" id="loading-text">동화를 만들고 있어요...</div>
-  <div class="loading-sub">AI가 열심히 이야기를 쓰고 있어요 🤖</div>
+  <!-- 상단 로딩 안내 -->
+  <div class="loading-info-box">
+    <div class="loading-emoji">✨</div>
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loading-text">동화를 만들고 있어요...</div>
+    <div class="loading-sub">AI가 열심히 이야기를 쓰고 있어요 🤖</div>
+  </div>
+  <!-- 점수판 -->
+  <div class="game-score-box">🎯 점수 <span id="game-score">0</span></div>
+  <!-- 풍선 게임 영역 -->
+  <div class="game-area" id="game-area"></div>
+  <!-- 하단 힌트 -->
+  <div class="game-hint">✨ 동화가 완성되는 동안 풍선을 터트려봐요!</div>
 </div>
 
 <!-- ── 레벨업 모달 ── -->
@@ -92,4 +101,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/collection.js') }}"></script>
+<script src="{{ url_for('static', filename='js/balloon-game.js') }}"></script>
 {% endblock %}
