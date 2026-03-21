@@ -470,6 +470,7 @@ if __name__ == '__main__':
     print(f"Gemini API:    {'SET ✓' if Config.GEMINI_API_KEY    else 'NOT SET - check .env'}")
     print(f"Anthropic API: {'SET ✓' if Config.ANTHROPIC_API_KEY else 'NOT SET (fallback)'}")
     print(f"OpenAI API:    {'SET ✓' if Config.OPENAI_API_KEY    else 'NOT SET - no image gen'}")
+    print(f"CLOVA TTS:     {'SET ✓' if Config.CLOVA_CLIENT_ID  else 'NOT SET - gTTS 폴백 사용'}")
     print("URL: http://localhost:5000")
     print("=" * 50)
     app.run(debug=True, use_reloader=False, port=5000, host='0.0.0.0')

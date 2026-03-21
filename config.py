@@ -10,6 +10,8 @@ class Config:
     OPENAI_API_KEY       = os.getenv('OPENAI_API_KEY', '')
     GEMINI_API_KEY       = os.getenv('GEMINI_API_KEY', '')
     HUGGINGFACE_API_KEY  = os.getenv('HUGGINGFACE_API_KEY', '')
+    CLOVA_CLIENT_ID      = os.getenv('CLOVA_CLIENT_ID', '')
+    CLOVA_CLIENT_SECRET  = os.getenv('CLOVA_CLIENT_SECRET', '')
 
     BASE_DIR          = os.path.dirname(__file__)
     DRAWINGS_DIR      = os.path.join(BASE_DIR, 'static', 'generated', 'drawings')
