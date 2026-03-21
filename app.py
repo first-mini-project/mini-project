@@ -237,6 +237,9 @@ def api_generate_story():
             story_data['scene_data'] = image_service.generate_scene_bgs_parallel(
                 story_data['scene_data']
             )
+            story_data['scene_data'] = image_service.flatten_scene_images(
+                story_data['scene_data'], drawings
+            )
 
         # 3. DALL-E로 일러스트 생성 (OpenAI 키 없으면 skip)
         illustration_path = image_service.generate_story_illustration(

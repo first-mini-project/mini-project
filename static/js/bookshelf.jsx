@@ -44,7 +44,6 @@ function getVectorStyle(id) {
 
 const BADGE_LIST = ['🐥','🐢','🦄','🐌','🐿️','🦖','🦋','🐝','🐙','🦔','🐼','🐨','🦁','🐮','🐷'];
 
-// Sub-component: Front-Facing Vector Book
 function BookCover({ book, idx, onClick, onDelete }) {
   const isUnread = !book.isRead;
   const styleConf = getVectorStyle(book.id);
@@ -70,10 +69,15 @@ function BookCover({ book, idx, onClick, onDelete }) {
       
       <button className="delete-book-btn" onClick={handleDelete} title="동화책 지우기">🗑️</button>
 
-      <div className="book-decoration" style={{ fontSize: styleConf.shapeSize, color: styleConf.shapeColor }}>
-        {book.coverImage && <img src={'/' + book.coverImage.replace(/^\/+/, '')} alt="" className="book-cover-image-preview" />}
-        {!book.coverImage && styleConf.shape}
-      </div>
+      {book.coverImage ? (
+        <div className="book-cover-image-wrapper">
+          <img src={'/' + book.coverImage.replace(/^\/+/, '')} alt="" className="book-cover-image-preview" />
+        </div>
+      ) : (
+        <div className="book-decoration" style={{ fontSize: styleConf.shapeSize, color: styleConf.shapeColor }}>
+          {styleConf.shape}
+        </div>
+      )}
 
       <div className="book-cover-title">{book.title}</div>
     </motion.div>
@@ -545,6 +549,7 @@ function BookshelfApp() {
   const [books, setBooks] = useState([]);
   const [activeBook, setActiveBook] = useState(null);
   const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+  const [isUnreadArchiveOpen, setIsUnreadArchiveOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [recommendedWords, setRecommendedWords] = useState([]);
 
@@ -695,6 +700,9 @@ function BookshelfApp() {
   
   // DB는 DESC 정렬 → allReadBooks[0]=최신, allReadBooks[-1]=가장 오래된 것
   // 선반: 최신 9권 (앞쪽), 꾸러미: 나머지 오래된 것들 (FIFO)
+  const unreadBooksOnShelf = unreadBooks.slice(0, 9);
+  const archivedUnreadBooks = unreadBooks.slice(9);
+  
   const readBooksOnShelf = allReadBooks.slice(0, 9);   // 최신 9권 → 내가 읽은 책 선반
   const archivedBooks    = allReadBooks.slice(9);       // 오래된 것들 → 책 꾸러미
 
@@ -708,11 +716,28 @@ function BookshelfApp() {
       <div style={{ position: 'relative' }}>
         <Shelf 
           title="새로 나온 책들 ✨" 
-          books={unreadBooks} 
+          books={unreadBooksOnShelf} 
           onBookClick={setActiveBook} 
           onDelete={deleteBook} 
           renderEmpty={renderEmptyUnread} 
         />
+
+        {/* Unread Archive Box (Left Side) */}
+        {archivedUnreadBooks.length > 0 && (
+          <div className="archive-treasure-box-container left-side">
+            <motion.div 
+              className="archive-treasure-box"
+              onClick={() => setIsUnreadArchiveOpen(true)}
+              whileHover={{ scale: 1.1, y: -5 }}
+              whileTap={{ scale: 0.95 }}
+              title={`이전 새 책 꾸러미 보기 (${archivedUnreadBooks.length}권)`}
+            >
+              <div className="archive-icon">🎁</div>
+              <div className="archive-label">새 책 꾸러미</div>
+              <div className="archive-count">{archivedUnreadBooks.length}</div>
+            </motion.div>
+          </div>
+        )}
       </div>
       
        <div style={{ position: 'relative' }}>
@@ -784,6 +809,9 @@ function BookshelfApp() {
         )}
         {isArchiveOpen && (
           <ArchiveModal books={archivedBooks} onClose={() => setIsArchiveOpen(false)} onBookClick={setActiveBook} onDelete={deleteBook} />
+        )}
+        {isUnreadArchiveOpen && (
+          <ArchiveModal books={archivedUnreadBooks} onClose={() => setIsUnreadArchiveOpen(false)} onBookClick={setActiveBook} onDelete={deleteBook} />
         )}
       </AnimatePresence>
     </div>
