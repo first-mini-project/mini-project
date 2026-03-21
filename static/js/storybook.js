@@ -287,7 +287,7 @@
       let placed = false;
       for (const r of result) { if (!r.primary)   { r.primary   = d; placed = true; break; } }
       if (!placed)
-        for (const r of result) { if (!r.secondary) { r.secondary = d; break; } }
+        for (const r of result) { if (!r.secondary && (!r.primary || r.primary.id !== d.id)) { r.secondary = d; break; } }
     }
     return result;
   }
@@ -367,7 +367,7 @@
       return 'sky';
     }
 
-    let html = `<div class="scene-sky" style="background:${theme.sky};">${bgImgTag(scene)}</div>
+    let html = `<div class="scene-sky" style="background:${theme.sky};">${bgImgTag(scene, true)}</div>
       ${deco}
       <div class="scene-vignette"></div>`;
 
@@ -589,7 +589,9 @@
       for (const d of pDrawings.filter(d => !shownIds.has(d.id))) {
         let placed = false;
         for (const a of assignments) {
-          if (!a.secondary) { a.secondary = d; placed = true; break; }
+          if (!a.secondary && (!a.primary || a.primary.id !== d.id)) { // 같은 그림 중복 방지
+            a.secondary = d; placed = true; break;
+          }
         }
         if (!placed) {
           for (const a of assignments) {

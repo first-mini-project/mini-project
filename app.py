@@ -202,7 +202,7 @@ def api_drawing_help():
 def api_generate_story():
     """선택한 그림들로 동화를 만듭니다."""
     data = request.get_json()
-    drawing_ids = data.get('drawing_ids', [])
+    drawing_ids = list(dict.fromkeys(data.get('drawing_ids', [])))  # 중복 제거, 순서 유지
 
     # 유효성 검사
     if not (Config.MIN_SELECTED <= len(drawing_ids) <= Config.MAX_SELECTED):
@@ -286,7 +286,12 @@ def api_generate_story():
             return result
         
         layout_spreads = []
-        
+
+        id_to_kw = {d['id']: d['korean'] for d in drawings}
+        print(f"\n{'='*50}")
+        print(f"[그림 배치] 선택된 그림: {[d['korean'] for d in drawings]}")
+        print(f"{'='*50}")
+
         # 표지
         cover_drawing_id = drawings[0]['id'] if drawings else None
         cover_merged_image = scenes[0].get('merged_image') if scenes else None
@@ -297,7 +302,7 @@ def api_generate_story():
             'mergedImage': cover_merged_image,
             'sceneIdx': 0
         })
-        
+
         # 동화 내용 스프레드 (빈 장면 스킵)
         for i in range(num_content):
             scene = scenes[i] if scenes and i < len(scenes) else None
@@ -306,10 +311,14 @@ def api_generate_story():
             mentioned_ids = []
             if scene.get('text'):
                 mentioned_ids = find_mentioned_drawings(scene['text'], drawings)
-            
+
             primary_id = mentioned_ids[0] if len(mentioned_ids) > 0 else None
             secondary_id = mentioned_ids[1] if len(mentioned_ids) > 1 else None
-            
+
+            print(f"[장면 {i+1}] 텍스트: {(scene.get('text') or '')[:40]}...")
+            print(f"         언급된 그림: {[id_to_kw.get(mid, mid) for mid in mentioned_ids]}")
+            print(f"         → primary={id_to_kw.get(primary_id, None)}, secondary={id_to_kw.get(secondary_id, None)}")
+
             layout_spreads.append({
                 'type': 'content',
                 'sceneIdx': i,
@@ -318,7 +327,7 @@ def api_generate_story():
                 'mergedImage': scene.get('merged_image') if scene else None,
                 'textPageNum': i + 1
             })
-        
+
         # 미배치 그림 후처리: 텍스트에 언급 안 된 그림을 빈 슬롯에 채움
         assigned_ids = set()
         for sp in layout_spreads:
@@ -328,19 +337,26 @@ def api_generate_story():
                 assigned_ids.add(sp['secondaryDrawingId'])
 
         unassigned = [d for d in drawings if d['id'] not in assigned_ids]
+        if unassigned:
+            print(f"[미배치 그림] {[d['korean'] for d in unassigned]} → 빈 슬롯에 강제 배치")
         for d in unassigned:
             placed = False
             for sp in layout_spreads:
                 if sp.get('type') == 'content' and not sp.get('primaryDrawingId'):
                     sp['primaryDrawingId'] = d['id']
                     placed = True
+                    print(f"  → '{d['korean']}' 장면{sp['sceneIdx']+1} primary 슬롯에 배치")
                     break
             if placed:
                 continue
             for sp in layout_spreads:
-                if sp.get('type') == 'content' and not sp.get('secondaryDrawingId'):
+                if (sp.get('type') == 'content'
+                        and not sp.get('secondaryDrawingId')
+                        and sp.get('primaryDrawingId') != d['id']):  # 같은 그림 중복 방지
                     sp['secondaryDrawingId'] = d['id']
+                    print(f"  → '{d['korean']}' 장면{sp['sceneIdx']+1} secondary 슬롯에 배치")
                     break
+        print(f"{'='*50}\n")
 
         # 교훈 페이지 (콜라주 이미지 포함)
         layout_spreads.append({
