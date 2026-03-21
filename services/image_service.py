@@ -419,16 +419,8 @@ def generate_story_illustration(title: str, keywords: list) -> str | None:
     동화 일러스트를 DALL-E 3로 생성하고 파일로 저장합니다.
     Returns: relative static path like 'static/generated/illustrations/xxx.png', or None
     """
-    if not Config.OPENAI_API_KEY:
-        return None
-
     try:
-        from openai import OpenAI
-        client = OpenAI(api_key=Config.OPENAI_API_KEY)
-
-        # 최대 3개 키워드 사용 (이미지 품질 향상)
         keywords_str = ', '.join(keywords[:3])
-
         prompt = (
             f"A beautiful, colorful children's book illustration for a Korean fairy tale. "
             f"The story is called '{title}' and features: {keywords_str}. "
@@ -437,24 +429,39 @@ def generate_story_illustration(title: str, keywords: list) -> str | None:
             f"Studio Ghibli inspired, dreamy and gentle."
         )
 
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size="1024x1024",
-            quality="standard",
-            n=1,
-        )
-
-        image_url = response.data[0].url
-        img_response = requests.get(image_url, timeout=30)
-
-        filename = f"story_{uuid.uuid4().hex}.png"
+        filename = f"story_{uuid.uuid4().hex[:16]}.jpg"
         filepath = os.path.join(Config.ILLUSTRATIONS_DIR, filename)
 
-        with open(filepath, 'wb') as f:
-            f.write(img_response.content)
-
-        return f"static/generated/illustrations/{filename}"
+        if Config.OPENAI_API_KEY:
+            from openai import OpenAI
+            client = OpenAI(api_key=Config.OPENAI_API_KEY)
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=prompt,
+                size="1024x1024",
+                quality="standard",
+                n=1,
+            )
+            image_url = response.data[0].url
+            img_response = requests.get(image_url, timeout=30)
+            with open(filepath, 'wb') as f:
+                f.write(img_response.content)
+            return f"static/generated/illustrations/{filename}"
+        else:
+            # Pollinations 폴백 생성 (무료 API)
+            print("[DALL-E 키 없음] Pollinations로 표지 일러스트 생성 중...")
+            encoded = urllib.parse.quote(prompt)
+            seed = abs(hash(title)) % 100000
+            url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&seed={seed}&nologo=true&model=flux"
+            resp = requests.get(url, timeout=35)
+            if resp.status_code == 200:
+                with open(filepath, 'wb') as f:
+                    f.write(resp.content)
+                print(f"[Pollinations 일러스트] 생성 완료: {filename}")
+                return f"static/generated/illustrations/{filename}"
+            else:
+                print(f"[Pollinations 일러스트 오류] 상태 코드: {resp.status_code}")
+                return None
 
     except Exception as e:
         print(f"[동화 일러스트 생성 오류] {e}")
