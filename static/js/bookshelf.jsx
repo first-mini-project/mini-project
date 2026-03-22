@@ -144,8 +144,63 @@ function makeNukkiDataURL(img) {
   return canvas.toDataURL('image/png');
 }
 
-const SKY_KW = new Set(['별', '달', '구름', '무지개', '태양', '나비', '풍선']);
-function isSky(d) { return d && SKY_KW.has(d.korean); }
+const SKY_KW = new Set(['별', '달', '구름', '무지개', '태양', '나비', '풍선', '새', '비행기', '우주선', '번개', '비']);
+
+const GROUNDED_PHRASES = ['내려왔', '떨어졌', '땅에', '바닥에', '앞에 놓', '손에 들', '품에', '가져', '주웠', '발견했'];
+const FLOATING_PHRASES = ['하늘로', '공중에', '둥실', '날아', '떠올라', '위로 올라', '하늘 위'];
+
+function isSky(d, sceneText) {
+  if (!d) return false;
+  const isSkyKw = SKY_KW.has(d.korean);
+  if (!sceneText) return isSkyKw;
+  if (isSkyKw) {
+    for (const sent of sceneText.split(/[.!?。\n]/)) {
+      if (!sent.includes(d.korean)) continue;
+      if (GROUNDED_PHRASES.some(p => sent.includes(p))) return false;
+    }
+    return true;
+  }
+  for (const sent of sceneText.split(/[.!?。\n]/)) {
+    if (!sent.includes(d.korean)) continue;
+    if (FLOATING_PHRASES.some(p => sent.includes(p))) return true;
+  }
+  return false;
+}
+
+const UNDERWATER_KEYS = ['underwater','ocean floor','coral','deep sea','submarine','sea bottom','seabed','beneath the sea','under the sea','undersea'];
+function isUnderwater(bgText) {
+  const bg = (bgText || '').toLowerCase();
+  return UNDERWATER_KEYS.some(k => bg.includes(k));
+}
+
+const DREAM_VERBS = ['상상','소원','꿈','꿈꾸','보고 싶','만져보','닿고 싶','갖고 싶','원했','바랐','그리웠'];
+function isDreamContext(kw, sceneText) {
+  if (!kw || !sceneText) return false;
+  for (const sent of sceneText.split(/[.!?。\n]/)) {
+    if (!sent.includes(kw)) continue;
+    if (DREAM_VERBS.some(v => sent.includes(v))) return true;
+  }
+  return false;
+}
+
+const SIZE_BIG   = ['거대한','커다란','엄청나게','크고','크다란','온 하늘','가득','넓게','웅장한','엄청 큰','아주 큰','굉장히 큰','거대하게','우뚝','당당하게','웅장하게'];
+const SIZE_SMALL = ['작은','조그만','조그마한','작고','아담한','아주 작은','귀엽고 작은','조그맣게','미니'];
+const DIST_FAR   = ['멀리서','저 멀리','멀리 보이는','저편에','저 멀리서','멀리 떨어진','멀리서 바라','뒤에 숨','구석에'];
+const DIST_NEAR  = ['가까이','바로 앞에','눈앞에','코앞에','다가왔','앞으로 다가','바짝','손에 닿을'];
+const PROMINENT  = ['주인공','중심에','한가운데','가운데에 서','활짝 펼쳐','용감하게 나','힘차게 달려'];
+
+function getDrawingScale(kw, sceneText) {
+  if (!kw || !sceneText) return 1.0;
+  for (const sent of sceneText.split(/[.!?。\n]/)) {
+    if (!sent.includes(kw)) continue;
+    if (SIZE_BIG.some(w => sent.includes(w)))   return 1.5;
+    if (PROMINENT.some(w => sent.includes(w)))  return 1.3;
+    if (DIST_NEAR.some(w => sent.includes(w)))  return 1.2;
+    if (SIZE_SMALL.some(w => sent.includes(w))) return 0.75;
+    if (DIST_FAR.some(w => sent.includes(w)))   return 0.6;
+  }
+  return 1.0;
+}
 
 const BAD_PATTERNS = {
   '달': ['달리','달래','달랑','달갑','달콤','달성'],
@@ -323,9 +378,8 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
     // ── 내용 페이지: storybook.js와 동일한 배치 방식 ──────────────────
     const { primary, secondary } = pageAssignments[currentPageIndex] || {};
 
-    const bgImage     = currentPage.bgImage;
-    const bgText      = currentPage.bgText || '';
-    const mergedImage = currentPage.mergedImage;
+    const bgImage = currentPage.bgImage;
+    const bgText  = currentPage.bgText || '';
     let bgSrc = null;
     if (bgImage) {
       bgSrc = '/' + bgImage.replace(/^\/+/, '');
@@ -337,9 +391,21 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
       bgSrc = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=768&nologo=true&seed=${seed}&model=flux`;
     }
 
-    const pSky = isSky(primary);
-    const sSky = isSky(secondary);
+    const sceneText = currentPageContent;
     const hasBoth = !!(primary && secondary);
+
+    // 스토리 텍스트 기반 그림 크기 계산 (storybook.js 동일 로직)
+    const pScale = getDrawingScale(primary && primary.korean, sceneText);
+    const sScaleRaw = getDrawingScale(secondary && secondary.korean, sceneText);
+    const sScale = Math.min(sScaleRaw, pScale * 0.85);
+
+    // 장면 맥락 분석
+    const underwater = isUnderwater(bgText);
+    const skyClass = (d) => {
+      if (!isSky(d, sceneText)) return null;
+      if (underwater || isDreamContext(d.korean, sceneText)) return 'dream';
+      return 'sky';
+    };
 
     const shadowDiv = (small) => (
       <div style={{
@@ -372,38 +438,53 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
         </div>
       );
     };
-    const skyStage = (d, side = 'center', scale = 1.0) => {
+    const skyStage = (d, cls = 'sky', scale = 1.0) => {
       const src = getDrawingSrc(d);
       if (!src) return null;
-      const baseH = side === 'right' ? 26 : 30;
+      const isRight = cls === 'sky-right' || cls === 'sky-right dream';
+      const isDream = cls === 'dream' || cls === 'sky-right dream';
+      const baseH = isRight ? 26 : (isDream ? 30 : 30);
       const h = (baseH * scale).toFixed(1);
-      const dur = side === 'right' ? '3.6s' : '3s';
-      const dir = side === 'right' ? 'reverse' : 'normal';
+      const dur = isRight ? '3.6s' : (isDream ? '4s' : '3s');
+      const dir = isRight ? 'reverse' : 'normal';
+      const pos = isDream && !isRight
+        ? { top:'8%', left:0, right:0 }
+        : isRight
+          ? { top:'4%', right:'4%', width:'36%' }
+          : { top:'4%', left:0, right:0 };
+      const imgFilter = isDream
+        ? 'drop-shadow(0 0 18px rgba(255,255,255,0.9)) drop-shadow(0 0 8px rgba(150,200,255,0.7)) blur(1.5px)'
+        : 'drop-shadow(0 8px 24px rgba(0,0,0,0.45))';
+      const imgOpacity = isDream ? 0.55 : 1;
       const style = {
         position: 'absolute', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', zIndex: side === 'right' ? 9 : 10,
+        alignItems: 'center', zIndex: isRight ? 9 : 10,
         animation: `float-anim ${dur} ease-in-out infinite ${dir}`,
-        ...(side === 'right' ? { top:'4%', right:'4%', width:'36%' } :
-                               { top:'4%', left:0, right:0 }),
+        ...pos,
       };
       return (
         <div key={d.id} style={style}>
           <img src={src} alt={d.korean || ''} onError={e => { e.target.style.display='none'; }}
             style={{ maxHeight:`${h}vh`, maxWidth:'80%', width:'auto',
                      objectFit:'contain', display:'block',
-                     filter:'drop-shadow(0 8px 24px rgba(0,0,0,0.45))' }} />
+                     opacity: imgOpacity, filter: imgFilter }} />
         </div>
       );
     };
 
     let drawingNodes = null;
+    const pSkyClass = primary ? skyClass(primary) : null;
+    const sSkyClass = secondary ? skyClass(secondary) : null;
     if (primary && !secondary) {
-      drawingNodes = pSky ? skyStage(primary) : groundStage(primary);
+      drawingNodes = pSkyClass ? skyStage(primary, pSkyClass, pScale) : groundStage(primary, 'center', pScale);
     } else if (primary && secondary) {
-      if (!pSky && sSky)       drawingNodes = <>{groundStage(primary)}{skyStage(secondary, 'right')}</>;
-      else if (pSky && !sSky)  drawingNodes = <>{groundStage(secondary)}{skyStage(primary)}</>;
-      else if (!pSky && !sSky) drawingNodes = <>{groundStage(primary, 'left')}{groundStage(secondary, 'right', 0.85)}</>;
-      else                     drawingNodes = <>{skyStage(primary)}{skyStage(secondary, 'right', 0.85)}</>;
+      if (!pSkyClass && sSkyClass)       drawingNodes = <>{groundStage(primary, 'center', pScale)}{skyStage(secondary, sSkyClass, sScale)}</>;
+      else if (pSkyClass && !sSkyClass)  drawingNodes = <>{groundStage(secondary, 'center', sScale)}{skyStage(primary, pSkyClass, pScale)}</>;
+      else if (!pSkyClass && !sSkyClass) drawingNodes = <>{groundStage(primary, 'left', pScale)}{groundStage(secondary, 'right', sScale)}</>;
+      else {
+        const secCls = (sSkyClass === 'dream') ? 'sky-right dream' : 'sky-right';
+        drawingNodes = <>{skyStage(primary, pSkyClass, pScale)}{skyStage(secondary, secCls, sScale)}</>;
+      }
     }
 
     return (
