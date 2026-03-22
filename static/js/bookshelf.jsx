@@ -146,9 +146,25 @@ function makeNukkiDataURL(img) {
 
 const SKY_KW = new Set(['별', '달', '구름', '무지개', '태양', '나비', '풍선']);
 function isSky(d) { return d && SKY_KW.has(d.korean); }
+
+const BAD_PATTERNS = {
+  '달': ['달리','달래','달랑','달갑','달콤','달성'],
+  '집': ['집합','집중','집단','집결','집착'],
+  '배': ['배우','배추','배반'],
+  '별': ['별로','별명','별나','별말'],
+  '산': ['산책','산만','산뜻'],
+  '꽃': ['꽃잎','꽃봉','꽃길','꽃망울','꽃가루'],
+  '나무': ['나무라'],
+};
+function containsWord(text, kw) {
+  if (!kw || !text.includes(kw)) return false;
+  let t = text;
+  for (const bad of (BAD_PATTERNS[kw] || [])) t = t.split(bad).join('▪');
+  return t.includes(kw);
+}
 function mentionedInScene(sceneText, drawings) {
   const t = sceneText || '';
-  return (drawings || []).filter(d => d.korean && t.includes(d.korean));
+  return (drawings || []).filter(d => d.korean && containsWord(t, d.korean));
 }
 
 // Overlaid Story Reader
@@ -304,67 +320,106 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
       );
     }
 
-    // ── 내용 페이지: 배치된 1-3개 그림 플로팅 ───────────────────────────
-    const { primary, secondary, tertiary } = pageAssignments[currentPageIndex] || {};
-    const pageDrawings = [primary, secondary, tertiary].filter(Boolean);
-    const dc = pageDrawings.length;
-    const maxH = dc === 1 ? '70vh' : dc === 2 ? '58vh' : '48vh';
-    const maxW = dc === 1 ? '90%' : dc === 2 ? '78%' : '65%';
-    // 그림 수에 따라 페이지 내 절대 위치 (top/left는 중심 기준, translate로 보정)
-    const POSITIONS = [
-      [{ top: '50%', left: '50%' }],
-      [{ top: '35%', left: '28%' }, { top: '62%', left: '72%' }],
-      [{ top: '25%', left: '50%' }, { top: '65%', left: '22%' }, { top: '68%', left: '76%' }],
-    ];
-    const positions = POSITIONS[Math.min(dc, 3) - 1] || POSITIONS[0];
+    // ── 내용 페이지: storybook.js와 동일한 배치 방식 ──────────────────
+    const { primary, secondary } = pageAssignments[currentPageIndex] || {};
 
-    const bgImage = currentPage.bgImage;
-    const bgText  = currentPage.bgText || '';
+    const bgImage     = currentPage.bgImage;
+    const bgText      = currentPage.bgText || '';
     const mergedImage = currentPage.mergedImage;
     let bgSrc = null;
     if (bgImage) {
       bgSrc = '/' + bgImage.replace(/^\/+/, '');
-    } else if (mergedImage) {
-      bgSrc = '/' + mergedImage.replace(/^\/+/, '');
     } else if (bgText) {
       const prompt = bgText
         + ', children storybook illustration, watercolor art style, soft pastel colors,'
         + ' magical whimsical background scenery, no characters, no people, no animals, no text';
       const seed = Math.abs(bgText.split('').reduce((h, c) => (Math.imul(31, h) + c.charCodeAt(0)) | 0, 0)) % 999983;
-      bgSrc = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${seed}&model=flux`;
+      bgSrc = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=768&nologo=true&seed=${seed}&model=flux`;
+    }
+
+    const pSky = isSky(primary);
+    const sSky = isSky(secondary);
+    const hasBoth = !!(primary && secondary);
+
+    const shadowDiv = (small) => (
+      <div style={{
+        width: small ? '40%' : '55%', height: small ? '10px' : '14px',
+        borderRadius: '50%', flexShrink: 0, marginTop: '-6px',
+        background: 'radial-gradient(ellipse at center, rgba(0,0,0,0.32) 0%, transparent 70%)',
+      }} />
+    );
+    const groundStage = (d, side = 'center', scale = 1.0) => {
+      const src = getDrawingSrc(d);
+      if (!src) return null;
+      const baseH = hasBoth ? 38 : 44;
+      const h = (baseH * scale).toFixed(1);
+      const isSub = side === 'right';
+      const style = {
+        position: 'absolute', bottom: 0, display: 'flex',
+        flexDirection: 'column', alignItems: 'center', zIndex: side === 'right' ? 9 : 10,
+        paddingBottom: '10px',
+        ...(side === 'left'   ? { left: 0, width: '52%' } :
+            side === 'right'  ? { right: 0, width: '46%' } :
+                                { left: 0, right: 0 }),
+      };
+      return (
+        <div key={d.id} style={style}>
+          <img src={src} alt={d.korean || ''} onError={e => { e.target.style.display='none'; }}
+            style={{ maxHeight:`${h}vh`, maxWidth: isSub ? '96%' : '88%',
+                     width:'auto', objectFit:'contain', display:'block',
+                     filter:'drop-shadow(0 8px 24px rgba(0,0,0,0.45))' }} />
+          {shadowDiv(isSub)}
+        </div>
+      );
+    };
+    const skyStage = (d, side = 'center', scale = 1.0) => {
+      const src = getDrawingSrc(d);
+      if (!src) return null;
+      const baseH = side === 'right' ? 26 : 30;
+      const h = (baseH * scale).toFixed(1);
+      const dur = side === 'right' ? '3.6s' : '3s';
+      const dir = side === 'right' ? 'reverse' : 'normal';
+      const style = {
+        position: 'absolute', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', zIndex: side === 'right' ? 9 : 10,
+        animation: `float-anim ${dur} ease-in-out infinite ${dir}`,
+        ...(side === 'right' ? { top:'4%', right:'4%', width:'36%' } :
+                               { top:'4%', left:0, right:0 }),
+      };
+      return (
+        <div key={d.id} style={style}>
+          <img src={src} alt={d.korean || ''} onError={e => { e.target.style.display='none'; }}
+            style={{ maxHeight:`${h}vh`, maxWidth:'80%', width:'auto',
+                     objectFit:'contain', display:'block',
+                     filter:'drop-shadow(0 8px 24px rgba(0,0,0,0.45))' }} />
+        </div>
+      );
+    };
+
+    let drawingNodes = null;
+    if (primary && !secondary) {
+      drawingNodes = pSky ? skyStage(primary) : groundStage(primary);
+    } else if (primary && secondary) {
+      if (!pSky && sSky)       drawingNodes = <>{groundStage(primary)}{skyStage(secondary, 'right')}</>;
+      else if (pSky && !sSky)  drawingNodes = <>{groundStage(secondary)}{skyStage(primary)}</>;
+      else if (!pSky && !sSky) drawingNodes = <>{groundStage(primary, 'left')}{groundStage(secondary, 'right', 0.85)}</>;
+      else                     drawingNodes = <>{skyStage(primary)}{skyStage(secondary, 'right', 0.85)}</>;
     }
 
     return (
       <div style={{ position:'relative', width:'100%', height:'100%',
                     overflow:'hidden', borderRadius:'10px 0 0 10px' }}>
-        {bgSrc ? (
-          <>
-            <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, #87ceeb, #5cbf8a)', zIndex:0 }} />
-            <img src={bgSrc} alt="배경"
-              onLoad={e => { e.target.style.opacity='1'; }}
-              onError={e => { e.target.style.display='none'; }}
-              style={{ position:'absolute', inset:0, width:'100%', height:'100%',
-                       objectFit:'cover', display:'block', zIndex:1, opacity:0, transition:'opacity 0.4s' }} />
-          </>
-        ) : (
-          <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, #87ceeb, #5cbf8a)' }} />
+        <div style={{ position:'absolute', inset:0, background:'linear-gradient(to bottom, #87ceeb, #5cbf8a)', zIndex:0 }} />
+        {bgSrc && (
+          <img src={bgSrc} alt="배경"
+            onLoad={e => { e.target.style.opacity='1'; }}
+            onError={e => { e.target.style.display='none'; }}
+            style={{ position:'absolute', inset:0, width:'100%', height:'100%',
+                     objectFit:'cover', display:'block', zIndex:1, opacity:0, transition:'opacity 0.8s' }} />
         )}
-        {pageDrawings.map((d, i) => {
-          const src = getDrawingSrc(d);
-          if (!src) return null;
-          const pos = positions[i] || positions[0];
-          return (
-            <div key={d.id} style={{
-              position:'absolute', top: pos.top, left: pos.left,
-              transform:'translate(-50%, -50%)', zIndex:5,
-              animation:`float-anim ${3 + i * 0.7}s ease-in-out ${i * 0.5}s infinite`,
-            }}>
-              <img src={src} alt={d.korean||''}
-                style={{ maxHeight:maxH, maxWidth:maxW, objectFit:'contain',
-                         filter:'drop-shadow(0 4px 14px rgba(0,0,0,0.35))' }} />
-            </div>
-          );
-        })}
+        <div style={{ position:'absolute', inset:0, zIndex:3, pointerEvents:'none',
+                      background:'radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,0.22) 100%)' }} />
+        {drawingNodes}
       </div>
     );
   }
