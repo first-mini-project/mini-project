@@ -24,21 +24,24 @@ body {
   display: flex;
   flex-direction: row; /* Keep books side-by-side */
   justify-content: center; /* Center horizontally */
-  align-items: center; /* Center vertically */
+  align-items: stretch; /* Stretch vertically so wrappers know their height */
   gap: 70px; /* Space between the two shelves */
   width: 100vw;
   height: calc(100vh - 75px); /* Safely account for the top navigation bar! */
   box-sizing: border-box;
   overflow: hidden;
   position: relative;
-  padding-top: 40px;
+  padding-top: max(3vh, 30px); /* Ensured space from top header bar */
   padding-bottom: 150px; /* Increased padding to clear the bottom fixed card */
 }
 
 /* Added wrapper padding to allow space for absolutely positioned headers in Flex centering */
 .shelf-wrapper {
-  padding: 70px 0;
+  padding: 70px 0 20px 0;
   position: relative;
+  height: 100%;
+  box-sizing: border-box;
+  justify-content: center;
 }
 
 /* Toy Decorations Container */
@@ -86,9 +89,8 @@ body {
 .shelf-section {
   width: 36vw;
   max-width: 420px;
-  height: 72vh;
-  min-height: 520px;
-  max-height: 850px;
+  flex-grow: 1; /* Stretch to fill responsive height */
+  max-height: calc(100% - 40px); /* Limit height proportionally */
   position: relative;
   background-color: #e29e4a;
   border-radius: 10px 10px 0 0;
@@ -175,7 +177,7 @@ body {
   width: 100%;
   height: calc(100% / 3); /* Responsive thirds */
   box-sizing: border-box;
-  border-bottom: 15px solid #d68b39; /* The wooden ledge */
+  border-bottom: 10px solid #d68b39; /* Compacted ledge */
   box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.1);
   z-index: 1;
 }
@@ -222,7 +224,7 @@ body {
   flex-direction: column;
   justify-content: flex-end;
   border: 1px solid rgba(0, 0, 0, 0.05);
-  margin-bottom: 15px; /* Safely lifts the book exactly on top of the 15px solid wooden background ledge */
+  margin-bottom: 10px; /* Safely lifts the book exactly on top of the thinner background ledge */
   z-index: 5;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1019,4 +1021,107 @@ body {
   flex-grow: 1;
   overflow-y: auto;
   border: 3px dashed #d68b39;
+}
+
+/* --- Media Query for Responsive Scaling (Max-width: 1240px) --- */
+@media (max-width: 1240px) {
+  /* 중앙 컨테이너가 가로로 나란히 있도록 유지하며 간격 축소 */
+  .bookshelf-container.flat-vector-bg {
+    gap: 5vw; 
+  }
+
+  /* 책장 섹션이 화면 너비에 반응하여 줄어듦 */
+  .shelf-section {
+    width: 40vw; 
+    max-width: none;
+    height: 65vh; /* 높이도 비율에 맞춰 약간 축소 */
+  }
+
+  /* 책장 내부 그리드와 책들의 크기 축소 */
+  .books-container {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 0 4px;
+    padding: 0 10px;
+  }
+
+  .book-cover.landscape {
+    width: 95px;
+    height: 85px;
+  }
+  .book-cover.portrait {
+    width: 80px;
+    height: 110px;
+  }
+
+  .shelf-title {
+    font-size: 1.2rem;
+    padding: 6px 20px;
+  }
+
+  /* 장식용 아이콘들을 숨기지 않고 크기를 축소하여 겹침 방지 */
+  .toy {
+    transform: scale(0.6) !important;
+    transform-origin: center center;
+  }
+  
+  /* 아이콘 위치 소폭 밖으로 밀어내어 책장 침범 방지 */
+  .toy-bear { left: -2vw; }
+  .toy-rocket { right: -2vw; }
+  .toy-duck { right: -2vw; }
+  .toy-blocks { left: -2vw; }
+  .toy-ball { left: -2vw; }
+}
+
+/* 태블릿 이하 해상도 처리 (Max-width: 1024px) */
+@media (max-width: 1024px) {
+  /* 장식 아이콘들이 메인 책장 화면을 침범하지 않도록 완전히 숨김 처리 */
+  .toy {
+    display: none !important;
+  }
+
+  /* 장난감이 사라진 공간을 활용하여 책장 좌우에 5vw 수준의 넓고 쾌적한 가변 여백(Gutter) 확보 */
+  .bookshelf-container.flat-vector-bg {
+    padding-left: 5vw;
+    padding-right: 5vw;
+    gap: 4vw; /* 중앙 여백 축소 */
+  }
+
+  /* 가변 여백을 고려하여 책장이 꽉 차게 보이도록 너비 미세 조정 */
+  .shelf-section {
+    width: 43vw;
+  }
+}
+
+/* 추가적으로 더 작은 태블릿/모바일 크기를 위한 비율 지속 축소 (Max-width: 768px) */
+@media (max-width: 768px) {
+  .bookshelf-container.flat-vector-bg {
+    padding-left: 3vw;
+    padding-right: 3vw;
+    gap: 3vw;
+  }
+
+  .shelf-section {
+    width: 45vw;
+    height: 60vh;
+  }
+
+  .books-container {
+    grid-template-columns: repeat(auto-fill, minmax(55px, 1fr));
+    gap: 0 3px;
+    padding: 0 5px;
+  }
+
+  .book-cover.landscape {
+    width: 65px;
+    height: 60px;
+  }
+  .book-cover.portrait {
+    width: 55px;
+    height: 75px;
+  }
+  
+  .shelf-title {
+    font-size: 1rem;
+    padding: 4px 12px;
+  }
 }
