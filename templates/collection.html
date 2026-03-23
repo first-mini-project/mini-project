@@ -1,14 +1,12 @@
-{% extends "base.html" %}
-{% block title %}그림 모음장{% endblock %}
-{% block nav_title %}그림 모음장 🖼️{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}그림 모음장{% endblock %} {% block
+nav_title %}그림 모음장 🖼️{% endblock %} {% block content %}
 <div class="container collection-page">
-
   <div class="collection-header fade-in">
     <h2 class="section-title">🖼️ 내가 그린 그림들</h2>
-    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-      <span class="selection-counter" id="selection-counter">0 / 5 개 선택</span>
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+      <span class="selection-counter" id="selection-counter"
+        >0 / 5 개 선택</span
+      >
       {% if drawings %}
       <button class="btn btn-pink btn-sm" id="btn-float">🌊 둥실둥실</button>
       <button class="btn btn-yellow btn-sm" id="btn-grid">📋 도감 보기</button>
@@ -17,34 +15,80 @@
     </div>
   </div>
 
-  <p class="fade-in" style="color:#888; font-size:0.95rem; margin-bottom:20px;">
+  <p
+    class="fade-in"
+    style="color: #888; font-size: 0.95rem; margin-bottom: 20px"
+  >
     그림을 골라서 동화를 만들어요! (최소 1개, 최대 5개)
   </p>
 
   {% if drawings %}
   <div class="drawings-grid">
     {% for drawing in drawings %}
-    <div class="drawing-card fade-in" data-id="{{ drawing.id }}" data-word-id="{{ drawing.word_id }}" style="animation-delay: {{ loop.index0 * 0.05 }}">
+    <div
+      class="drawing-card fade-in"
+      data-id="{{ drawing.id }}"
+      data-word-id="{{ drawing.word_id }}"
+      style="animation-delay: {{ loop.index0 * 0.05 }}"
+    >
       <div class="selected-badge">✓</div>
       <div class="card-actions">
-        <a href="/draw/{{ drawing.word_id }}" class="card-action-btn edit-btn" title="다시 그리기">✏️</a>
-        <button class="card-action-btn delete-btn" data-id="{{ drawing.id }}" title="삭제">🗑️</button>
+        <a
+          href="/draw/{{ drawing.word_id }}"
+          class="card-action-btn edit-btn"
+          title="다시 그리기"
+          >✏️</a
+        >
+        <button
+          class="card-action-btn delete-btn"
+          data-id="{{ drawing.id }}"
+          title="삭제"
+        >
+          🗑️
+        </button>
       </div>
       {% if drawing.file_path %}
-      <img src="{{ url_for('static', filename=drawing.file_path.replace('static/', '')) }}" alt="{{ drawing.korean }}"
-        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+      <img
+        src="{{ url_for('static', filename=drawing.file_path.replace('static/', '')) }}"
+        alt="{{ drawing.korean }}"
+        onerror="
+          this.style.display = 'none';
+          this.nextElementSibling.style.display = 'flex';
+        "
+      />
       <div
-        style="display:none; width:100%; height:140px; align-items:center; justify-content:center; font-size:4rem; background:#f9f9f9; border-radius:10px;">
+        style="
+          display: none;
+          width: 100%;
+          height: 140px;
+          align-items: center;
+          justify-content: center;
+          font-size: 4rem;
+          background: #f9f9f9;
+          border-radius: 10px;
+        "
+      >
         {{ drawing.emoji }}
       </div>
       {% else %}
       <div
-        style="width:100%; height:140px; display:flex; align-items:center; justify-content:center; font-size:4rem; background:#f9f9f9; border-radius:10px;">
+        style="
+          width: 100%;
+          height: 140px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 4rem;
+          background: #f9f9f9;
+          border-radius: 10px;
+        "
+      >
         {{ drawing.emoji }}
       </div>
       {% endif %}
       <div class="drawing-card-word">
-        <span class="drawing-card-emoji">{{ drawing.emoji }}</span> {{ drawing.korean }}
+        <span class="drawing-card-emoji">{{ drawing.emoji }}</span> {{
+        drawing.korean }}
       </div>
     </div>
     {% endfor %}
@@ -53,16 +97,15 @@
   {% else %}
   <div class="empty-state fade-in">
     <span class="empty-icon">🎨</span>
-    <p>아직 그린 그림이 없어요!<br>먼저 그림을 그려봐요.</p>
+    <p>아직 그린 그림이 없어요!<br />먼저 그림을 그려봐요.</p>
     <a href="/draw" class="btn btn-yellow btn-big">그림 그리러 가기 →</a>
   </div>
   {% endif %}
-
 </div>
 
 {% if drawings %}
 <div class="collection-footer">
-  <span style="font-size:0.9rem; color:#888;">최소 1개 ~ 최대 5개 선택</span>
+  <span style="font-size: 0.9rem; color: #888">최소 1개 ~ 최대 5개 선택</span>
   <button class="btn btn-pink btn-big" id="make-story-btn" disabled>
     📖 동화 만들기!
   </button>
@@ -75,9 +118,18 @@
     <div class="protagonist-title">⭐ 누가 주인공이에요?</div>
     <p class="protagonist-sub">동화의 중심이 될 그림을 골라요!</p>
     <div class="protagonist-cards" id="protagonist-cards"></div>
-    <div style="display:flex; gap:12px; justify-content:center; margin-top:18px;">
+    <div
+      style="
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 18px;
+      "
+    >
       <button class="btn btn-yellow" id="protagonist-skip-btn">건너뛰기</button>
-      <button class="btn btn-pink" id="protagonist-confirm-btn" disabled>이 친구가 주인공! ✨</button>
+      <button class="btn btn-pink" id="protagonist-confirm-btn" disabled>
+        이 친구가 주인공! ✨
+      </button>
     </div>
   </div>
 </div>
@@ -104,15 +156,22 @@
     <span class="level-up-badge" id="level-up-badge">🌱</span>
     <h2 class="level-up-title" id="level-up-title">레벨 업!</h2>
     <p class="level-up-msg" id="level-up-msg">새로운 작가 등급을 획득했어요!</p>
-    <div class="level-up-unlocked" id="level-up-unlocked">🔓 새로운 도구가 열렸어요!</div>
-    <button class="btn btn-purple" onclick="document.getElementById('level-up-modal').classList.remove('show')">확인</button>
+    <div class="level-up-unlocked" id="level-up-unlocked">
+      🔓 새로운 도구가 열렸어요!
+    </div>
+    <button
+      class="btn btn-purple"
+      onclick="
+        document.getElementById('level-up-modal').classList.remove('show')
+      "
+    >
+      확인
+    </button>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script src="{{ url_for('static', filename='js/collection.js') }}"></script>
 <script src="{{ url_for('static', filename='js/balloon-game.js') }}"></script>
 {% endblock %}

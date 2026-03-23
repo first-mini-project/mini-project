@@ -7,6 +7,7 @@ run_ngrok.py - ngrok 터널을 열고 Flask 앱을 실행합니다.
 
 무료 authtoken 발급: https://dashboard.ngrok.com/authtokens
 """
+
 import sys
 import os
 import io
@@ -16,13 +17,14 @@ from dotenv import load_dotenv
 load_dotenv()  # .env 파일 로드
 
 # Windows 콘솔 UTF-8 출력
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # ─── 인자 파싱
 parser = argparse.ArgumentParser()
-parser.add_argument('--token', default=os.getenv('NGROK_AUTHTOKEN', ''),
-                    help='ngrok authtoken')
-parser.add_argument('--port', type=int, default=5000)
+parser.add_argument(
+    "--token", default=os.getenv("NGROK_AUTHTOKEN", ""), help="ngrok authtoken"
+)
+parser.add_argument("--port", type=int, default=5000)
 args = parser.parse_args()
 
 PORT = args.port
@@ -60,10 +62,13 @@ except Exception as e:
 
 # ─── Flask 앱 실행 (ngrok 터널이 유지되는 동안 실행)
 from config import Config
+
 Config.init_dirs()
 
 import database as db
+
 db.init_db()
 
 from app import app
-app.run(port=PORT, host='0.0.0.0', debug=False)
+
+app.run(port=PORT, host="0.0.0.0", debug=False)

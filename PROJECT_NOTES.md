@@ -8,38 +8,43 @@
 
 ### 페이지별 담당 영역 구분
 
-| 페이지 | 관련 파일 | 주의사항 |
-|--------|----------|---------|
-| 그림 그리기 (`/draw`) | `drawing.html`, `canvas.js` | **캔버스 로직 수정 금지** — 다른 모든 기능이 여기서 저장된 그림에 의존함 |
-| 그림 선택 (`/collection`) | `collection.html`, `collection.js` | `selected` Set과 `drawing_ids` 구조 유지 필수 — 동화 생성 API 입력값 |
-| 동화 생성 (API) | `app.py`, `services/` | `scene_data` 구조 변경 시 storybook.js도 반드시 같이 수정 |
-| 동화 뷰어 (`/story/<id>`) | `storybook.html`, `storybook.js` | JS 전체가 `<script id="story-data">` JSON 구조에 의존. DB 스키마 변경 시 같이 수정 |
-| 도서관 (`/library`) | `library.html` | `story.keywords`, `story.illustration_path` 사용 — DB 컬럼명 바꾸면 템플릿도 수정 |
+| 페이지                    | 관련 파일                          | 주의사항                                                                           |
+| ------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------- |
+| 그림 그리기 (`/draw`)     | `drawing.html`, `canvas.js`        | **캔버스 로직 수정 금지** — 다른 모든 기능이 여기서 저장된 그림에 의존함           |
+| 그림 선택 (`/collection`) | `collection.html`, `collection.js` | `selected` Set과 `drawing_ids` 구조 유지 필수 — 동화 생성 API 입력값               |
+| 동화 생성 (API)           | `app.py`, `services/`              | `scene_data` 구조 변경 시 storybook.js도 반드시 같이 수정                          |
+| 동화 뷰어 (`/story/<id>`) | `storybook.html`, `storybook.js`   | JS 전체가 `<script id="story-data">` JSON 구조에 의존. DB 스키마 변경 시 같이 수정 |
+| 도서관 (`/library`)       | `library.html`                     | `story.keywords`, `story.illustration_path` 사용 — DB 컬럼명 바꾸면 템플릿도 수정  |
 
 ---
 
 ### 🚨 절대 건드리면 안 되는 것들
 
 #### 1. `canvas.js` — 그림 그리기 캔버스
+
 - 이 파일을 수정하면 저장되는 `image_data`(base64) 형식이 달라질 수 있음
 - `image_data`는 `database.py` → DB → `storybook.js` 누끼 처리까지 연결됨
 - 수정이 필요하면 팀 전체 합의 필요
 
 #### 2. `app.py` 페이지 라우터 (`/`, `/main`, `/draw`, `/collection`, `/library`, `/story/<id>`)
+
 - URL 경로 바꾸면 모든 페이지 내 링크(`href`, `window.location.href`) 전부 깨짐
 - 추가는 괜찮지만 기존 경로 수정/삭제 금지
 
 #### 3. `database.py` — `save_story()` / `get_story()` 반환 키 이름
+
 - `title`, `content`, `moral`, `keywords`, `drawing_ids`, `scene_data`, `audio_path` 키 이름을 바꾸면
   `storybook.html` (Jinja2 변수), `storybook.js` (`SD.title` 등), `library.html` 전부 깨짐
 - 컬럼 **추가**는 괜찮음. 기존 키 **이름 변경/삭제**는 금지
 
 #### 4. `scene_data` JSON 구조 (`text`, `bg`, `bg_image`)
+
 - `ai_service.py`가 생성 → `image_service.py`가 `bg_image` 추가 → DB 저장 → `storybook.js`가 읽음
 - 키 이름 하나라도 바꾸면 배경 이미지, 그림 배치, 텍스트 표시가 전부 깨짐
 - 필드 **추가**는 괜찮음
 
 #### 5. `static/js/storybook.js` — `spreads` 배열 구조
+
 - `spreads[i] = { leftHTML, rightHTML }` 구조가 고정됨
 - `renderSpread()`, `goNext()`, `goPrev()` 모두 이 구조에 의존
 - leftHTML / rightHTML 키 이름 변경 금지
@@ -49,17 +54,20 @@
 ### ⚡ 작업 시 자주 발생하는 충돌 패턴
 
 #### `config.py` 머지 충돌
+
 - 여러 브랜치에서 `config.py`에 새 변수 추가 시 충돌 발생
 - 해결법: 충돌 마커(`<<<<<<`, `=======`, `>>>>>>>`) 모두 제거하고 **양쪽 변수를 모두 유지**
 - 충돌 해결 후 반드시 `git add config.py` 실행
 
 #### Flask `debug=True` + GPU 모델 로드 → segfault
+
 - `debug=True`는 Flask가 프로세스 2개를 띄움 (reloader + worker)
 - 양쪽에서 SDXL-Turbo 모델 로드 시도 → VRAM 6GB 초과 → **segfault**
 - 현재 `debug=False`로 고정. 절대 `debug=True`로 바꾸지 말 것
 - 코드 수정 후 서버 재시작은 직접 `Ctrl+C` → `python app.py`
 
 #### `requirements.txt`에 `torch` 직접 설치 명령 쓰지 말 것
+
 - `torch`는 CUDA 버전을 특수 URL로 설치해야 함
 - `pip install torch`만 쓰면 CPU 버전 설치됨 → GPU 이미지 생성 안 됨
 - 앱 실행 시 `_ensure_dependencies()`가 자동으로 올바른 버전 설치함
@@ -101,13 +109,15 @@
 > 작업 시 이 파일을 먼저 읽고, **아래 영역만** 수정한다.
 
 ### 건드려도 되는 영역
-| 영역 | 관련 파일 |
-|------|----------|
-| 그림 가져오는 과정 | `database.py`, `templates/collection.html`, `static/js/collection.js` |
-| 스토리 생성 과정 | `app.py`, `services/ai_service.py`, `services/image_service.py`, `services/tts_service.py` |
-| 스토리 뷰어 | `templates/library.html`, `templates/storybook.html`, `static/js/storybook.js` |
+
+| 영역               | 관련 파일                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| 그림 가져오는 과정 | `database.py`, `templates/collection.html`, `static/js/collection.js`                      |
+| 스토리 생성 과정   | `app.py`, `services/ai_service.py`, `services/image_service.py`, `services/tts_service.py` |
+| 스토리 뷰어        | `templates/library.html`, `templates/storybook.html`, `static/js/storybook.js`             |
 
 ### 건드리면 안 되는 영역
+
 - Landing / Main 페이지 (`templates/landing.html`, `templates/main.html`)
 - 그림 그리기 캔버스 (`templates/drawing.html`, `static/js/canvas.js`)
 - Flask 라우팅 구조 (`app.py` 페이지 라우터)
@@ -129,17 +139,17 @@ Python Flask 기반 아이들을 위한 AI 동화책 생성 앱.
 
 ## 기술 스택
 
-| 구분 | 기술 |
-|------|------|
-| 백엔드 | Python + Flask |
-| 템플릿 | Jinja2 (서버사이드 렌더링) |
-| 프론트 | Vanilla JS (프레임워크 없음) |
-| AI - 동화 생성 | Google Gemini (`gemini-2.5-flash-lite`) → Claude 폴백 |
-| AI - 배경 이미지 | 로컬 `stabilityai/sdxl-turbo` (diffusers, GPU 필요) |
-| AI - 참고 이미지 | OpenAI DALL-E 3 (키 없으면 스킵) |
-| TTS | gTTS (MP3) + Web Speech API 폴백 |
-| DB | SQLite (`fairy_tale.db`) |
-| 포트 | 5000 |
+| 구분             | 기술                                                  |
+| ---------------- | ----------------------------------------------------- |
+| 백엔드           | Python + Flask                                        |
+| 템플릿           | Jinja2 (서버사이드 렌더링)                            |
+| 프론트           | Vanilla JS (프레임워크 없음)                          |
+| AI - 동화 생성   | Google Gemini (`gemini-2.5-flash-lite`) → Claude 폴백 |
+| AI - 배경 이미지 | 로컬 `stabilityai/sdxl-turbo` (diffusers, GPU 필요)   |
+| AI - 참고 이미지 | OpenAI DALL-E 3 (키 없으면 스킵)                      |
+| TTS              | gTTS (MP3) + Web Speech API 폴백                      |
+| DB               | SQLite (`fairy_tale.db`)                              |
+| 포트             | 5000                                                  |
 
 ---
 
@@ -155,6 +165,7 @@ python app.py
 ```
 
 환경변수 (`.env`):
+
 ```
 GEMINI_API_KEY=your_key        # 동화 생성 (필수)
 ANTHROPIC_API_KEY=your_key     # Claude 폴백 (선택)
@@ -275,6 +286,7 @@ CREATE TABLE stories (
 ```
 
 ### scene_data 구조 (핵심)
+
 ```json
 [
   {
@@ -285,6 +297,7 @@ CREATE TABLE stories (
   ...
 ]
 ```
+
 - `text`: Gemini가 생성한 단락 텍스트
 - `bg`: 영어로 된 배경 묘사 (SDXL 프롬프트로 사용)
 - `bg_image`: SDXL-Turbo가 생성한 배경 이미지 경로 (없으면 CSS 그라데이션 폴백)
@@ -294,34 +307,37 @@ CREATE TABLE stories (
 ## 핵심 변수 / 함수 설명
 
 ### `config.py` — 전역 설정
-| 변수 | 설명 |
-|------|------|
-| `Config.GEMINI_API_KEY` | Gemini 동화 생성용 API 키 |
-| `Config.ANTHROPIC_API_KEY` | Claude 폴백용 API 키 |
-| `Config.OPENAI_API_KEY` | DALL-E 참고 이미지용 (없으면 스킵) |
-| `Config.HUGGINGFACE_TOKEN` | 현재 미사용 (로컬 GPU로 대체) |
-| `Config.DRAWINGS_DIR` | `static/generated/drawings/` 절대 경로 |
-| `Config.BGS_DIR` | `static/generated/bgs/` 절대 경로 |
+
+| 변수                       | 설명                                        |
+| -------------------------- | ------------------------------------------- |
+| `Config.GEMINI_API_KEY`    | Gemini 동화 생성용 API 키                   |
+| `Config.ANTHROPIC_API_KEY` | Claude 폴백용 API 키                        |
+| `Config.OPENAI_API_KEY`    | DALL-E 참고 이미지용 (없으면 스킵)          |
+| `Config.HUGGINGFACE_TOKEN` | 현재 미사용 (로컬 GPU로 대체)               |
+| `Config.DRAWINGS_DIR`      | `static/generated/drawings/` 절대 경로      |
+| `Config.BGS_DIR`           | `static/generated/bgs/` 절대 경로           |
 | `Config.ILLUSTRATIONS_DIR` | `static/generated/illustrations/` 절대 경로 |
-| `Config.AUDIO_DIR` | `static/audio/` 절대 경로 |
-| `Config.MIN_SELECTED` | 동화 생성 최소 그림 수 (1) |
-| `Config.MAX_SELECTED` | 동화 생성 최대 그림 수 (5) |
+| `Config.AUDIO_DIR`         | `static/audio/` 절대 경로                   |
+| `Config.MIN_SELECTED`      | 동화 생성 최소 그림 수 (1)                  |
+| `Config.MAX_SELECTED`      | 동화 생성 최대 그림 수 (5)                  |
 
 ---
 
 ### `services/ai_service.py` — 동화 텍스트 생성
-| 변수/함수 | 설명 |
-|----------|------|
-| `_WORLDS` | 15개 세계관 리스트. `(이름, 배경_묘사)` 튜플. 랜덤 선택 |
-| `_GENRES` | 10개 장르 리스트. `(이름, 플롯_설명)` 튜플. 랜덤 선택 |
-| `_build_prompt(keywords)` | _WORLDS + _GENRES 랜덤 조합 + keywords로 Gemini 프롬프트 생성 |
-| `_parse_result(text)` | Gemini 응답 JSON 파싱. `scenes` → `scene_data` 키로 변환 |
-| `generate_fairy_tale(keywords, drawings)` | 진입점. Gemini 우선 → Claude 폴백 → 기본 템플릿 |
-| `_generate_with_gemini(keywords, drawings)` | Gemini `gemini-2.5-flash-lite` 호출. Vision 포함 가능 |
-| `_generate_with_claude(keywords, drawings)` | Claude `claude-sonnet-4-6` 폴백 |
-| `_fallback_story(keywords)` | API 없을 때 하드코딩 기본 스토리 반환 |
+
+| 변수/함수                                   | 설명                                                            |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| `_WORLDS`                                   | 15개 세계관 리스트. `(이름, 배경_묘사)` 튜플. 랜덤 선택         |
+| `_GENRES`                                   | 10개 장르 리스트. `(이름, 플롯_설명)` 튜플. 랜덤 선택           |
+| `_build_prompt(keywords)`                   | \_WORLDS + \_GENRES 랜덤 조합 + keywords로 Gemini 프롬프트 생성 |
+| `_parse_result(text)`                       | Gemini 응답 JSON 파싱. `scenes` → `scene_data` 키로 변환        |
+| `generate_fairy_tale(keywords, drawings)`   | 진입점. Gemini 우선 → Claude 폴백 → 기본 템플릿                 |
+| `_generate_with_gemini(keywords, drawings)` | Gemini `gemini-2.5-flash-lite` 호출. Vision 포함 가능           |
+| `_generate_with_claude(keywords, drawings)` | Claude `claude-sonnet-4-6` 폴백                                 |
+| `_fallback_story(keywords)`                 | API 없을 때 하드코딩 기본 스토리 반환                           |
 
 **반환 구조**:
+
 ```python
 {
   "title": "동화 제목",
@@ -337,16 +353,18 @@ CREATE TABLE stories (
 ---
 
 ### `services/image_service.py` — 배경 이미지 생성
-| 변수/함수 | 설명 |
-|----------|------|
-| `_pipe` | 글로벌 SDXL-Turbo 파이프라인 인스턴스. 최초 1회만 로드 |
-| `_get_pipe()` | `_pipe` 없으면 `stabilityai/sdxl-turbo` 로드 후 반환. CUDA 사용 |
-| `generate_scene_bg(bg_text)` | bg_text로 512×512 JPEG 생성 → `BGS_DIR` 저장 → 경로 반환 |
-| `generate_scene_bgs_parallel(scene_data)` | scene_data 리스트 순회하며 각 `bg` 필드로 이미지 생성. 결과를 `bg_image` 키에 저장 |
-| `generate_story_illustration(title, keywords)` | DALL-E 3로 표지 이미지 생성 (OpenAI 키 없으면 None) |
-| `generate_reference_image(korean, english, prompt)` | 그림 그리기 화면의 참고 이미지. DALL-E 3 사용 |
+
+| 변수/함수                                           | 설명                                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `_pipe`                                             | 글로벌 SDXL-Turbo 파이프라인 인스턴스. 최초 1회만 로드                             |
+| `_get_pipe()`                                       | `_pipe` 없으면 `stabilityai/sdxl-turbo` 로드 후 반환. CUDA 사용                    |
+| `generate_scene_bg(bg_text)`                        | bg_text로 512×512 JPEG 생성 → `BGS_DIR` 저장 → 경로 반환                           |
+| `generate_scene_bgs_parallel(scene_data)`           | scene_data 리스트 순회하며 각 `bg` 필드로 이미지 생성. 결과를 `bg_image` 키에 저장 |
+| `generate_story_illustration(title, keywords)`      | DALL-E 3로 표지 이미지 생성 (OpenAI 키 없으면 None)                                |
+| `generate_reference_image(korean, english, prompt)` | 그림 그리기 화면의 참고 이미지. DALL-E 3 사용                                      |
 
 **SDXL-Turbo 특징**:
+
 - `num_inference_steps=1` (단 1스텝으로 빠른 생성)
 - `guidance_scale=0.0` (CFG 없음)
 - 모델 로드 후 장면당 약 0.1초
@@ -354,32 +372,35 @@ CREATE TABLE stories (
 ---
 
 ### `services/tts_service.py` — 음성 생성
-| 함수 | 설명 |
-|------|------|
+
+| 함수                       | 설명                                                  |
+| -------------------------- | ----------------------------------------------------- |
 | `generate_tts(text, slow)` | gTTS로 한국어 MP3 생성 → `AUDIO_DIR` 저장 → 경로 반환 |
 
 ---
 
 ### `static/js/storybook.js` — 3D 동화책 뷰어
-| 변수/함수 | 설명 |
-|----------|------|
-| `SCENE_THEMES` | 15개 테마 배열. `{re, type, sky, ground}`. bg 텍스트로 CSS 그라데이션 선택 |
-| `DECO_HTML` | 테마별 장식 HTML (별, 구름, 거품 등) |
-| `KW_THEME` | 한국어 키워드 → 테마 타입 매핑 (bg 판별 실패 시 폴백) |
-| `SKY_KW` | 하늘에 배치할 키워드 Set: `{'별','달','구름','무지개','태양','나비','풍선'}` |
-| `makeNukkiDataURL(img)` | Canvas로 흰 배경 제거. 밝기 > 248 → 투명, 215~248 → 반투명 |
-| `loadNukki(drawing)` | 그림 하나를 Promise로 누끼 처리. `drawing.nukkiUrl` 추가 |
-| `bgImgTag(scene)` | `scene.bg_image`(로컬) 우선, 없으면 Pollinations.ai URL로 fallback |
-| `mentioned(sceneText, allDrawings)` | 장면 텍스트에 키워드가 포함된 그림만 필터링 |
-| `mapToScenes(allDrawings, scenes, count)` | 장면별 `{primary, secondary}` 결정. **텍스트 언급된 그림만 표시** (미언급 → null) |
-| `makeDrawingPageHTML(primary, secondary, scene)` | 장면 페이지(좌) HTML 빌더. 배경 + 그림 배치 |
-| `makeTextPageHTML(text, pageNum)` | 텍스트 페이지(우) HTML 빌더 |
-| `spreads` | `[{leftHTML, rightHTML}]` 배열. 표지(0) + 장면들(1~N) + 교훈(마지막) |
-| `current` | 현재 펼쳐진 spread 인덱스 |
-| `goNext(targetIdx)` | 다음 페이지. 오른쪽 flipCard를 rotateY(-180deg) |
-| `goPrev(targetIdx)` | 이전 페이지. 왼쪽 flipCard를 rotateY(+180deg) |
+
+| 변수/함수                                        | 설명                                                                              |
+| ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `SCENE_THEMES`                                   | 15개 테마 배열. `{re, type, sky, ground}`. bg 텍스트로 CSS 그라데이션 선택        |
+| `DECO_HTML`                                      | 테마별 장식 HTML (별, 구름, 거품 등)                                              |
+| `KW_THEME`                                       | 한국어 키워드 → 테마 타입 매핑 (bg 판별 실패 시 폴백)                             |
+| `SKY_KW`                                         | 하늘에 배치할 키워드 Set: `{'별','달','구름','무지개','태양','나비','풍선'}`      |
+| `makeNukkiDataURL(img)`                          | Canvas로 흰 배경 제거. 밝기 > 248 → 투명, 215~248 → 반투명                        |
+| `loadNukki(drawing)`                             | 그림 하나를 Promise로 누끼 처리. `drawing.nukkiUrl` 추가                          |
+| `bgImgTag(scene)`                                | `scene.bg_image`(로컬) 우선, 없으면 Pollinations.ai URL로 fallback                |
+| `mentioned(sceneText, allDrawings)`              | 장면 텍스트에 키워드가 포함된 그림만 필터링                                       |
+| `mapToScenes(allDrawings, scenes, count)`        | 장면별 `{primary, secondary}` 결정. **텍스트 언급된 그림만 표시** (미언급 → null) |
+| `makeDrawingPageHTML(primary, secondary, scene)` | 장면 페이지(좌) HTML 빌더. 배경 + 그림 배치                                       |
+| `makeTextPageHTML(text, pageNum)`                | 텍스트 페이지(우) HTML 빌더                                                       |
+| `spreads`                                        | `[{leftHTML, rightHTML}]` 배열. 표지(0) + 장면들(1~N) + 교훈(마지막)              |
+| `current`                                        | 현재 펼쳐진 spread 인덱스                                                         |
+| `goNext(targetIdx)`                              | 다음 페이지. 오른쪽 flipCard를 rotateY(-180deg)                                   |
+| `goPrev(targetIdx)`                              | 이전 페이지. 왼쪽 flipCard를 rotateY(+180deg)                                     |
 
 **3D 책 DOM 구조**:
+
 ```
 #book-spread-container
   ├── #b-static-left    ← 왼쪽 고정 페이지 (z-index:2)
@@ -392,25 +413,26 @@ CREATE TABLE stories (
 ---
 
 ### `static/js/collection.js` — 그림 선택
-| 변수/함수 | 설명 |
-|----------|------|
-| `selected` | `Set<string>` — 선택된 drawing.id 집합 (문자열) |
-| `MAX_SELECT` | 최대 선택 수 (5) |
-| `updateUI()` | 선택 상태 시각화. 배지 번호, 버튼 활성화, 미선택 카드 dimming |
-| `generateStory()` | `POST /api/story/generate` 호출. 로딩 오버레이 표시 |
+
+| 변수/함수         | 설명                                                          |
+| ----------------- | ------------------------------------------------------------- |
+| `selected`        | `Set<string>` — 선택된 drawing.id 집합 (문자열)               |
+| `MAX_SELECT`      | 최대 선택 수 (5)                                              |
+| `updateUI()`      | 선택 상태 시각화. 배지 번호, 버튼 활성화, 미선택 카드 dimming |
+| `generateStory()` | `POST /api/story/generate` 호출. 로딩 오버레이 표시           |
 
 ---
 
 ## API 엔드포인트
 
-| Method | Path | 설명 |
-|--------|------|------|
-| GET | `/api/words` | 전체 단어 목록 |
-| GET | `/api/drawings` | 전체 그림 목록 |
-| POST | `/api/drawing/save` | 그림 저장 (base64 → PNG 파일 + DB) |
-| POST | `/api/drawing/help` | DALL-E 참고 이미지 생성 |
-| POST | `/api/story/generate` | 동화 생성 전체 흐름 |
-| DELETE | `/api/story/<id>` | 동화 삭제 |
+| Method | Path                  | 설명                               |
+| ------ | --------------------- | ---------------------------------- |
+| GET    | `/api/words`          | 전체 단어 목록                     |
+| GET    | `/api/drawings`       | 전체 그림 목록                     |
+| POST   | `/api/drawing/save`   | 그림 저장 (base64 → PNG 파일 + DB) |
+| POST   | `/api/drawing/help`   | DALL-E 참고 이미지 생성            |
+| POST   | `/api/story/generate` | 동화 생성 전체 흐름                |
+| DELETE | `/api/story/<id>`     | 동화 삭제                          |
 
 ---
 

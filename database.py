@@ -88,7 +88,7 @@ def get_db():
 
 def init_db():
     with get_db() as conn:
-        conn.executescript('''
+        conn.executescript("""
             CREATE TABLE IF NOT EXISTS words (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 korean TEXT NOT NULL,
@@ -118,13 +118,15 @@ def init_db():
                 is_read INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
-        ''')
-        existing_words = {row['korean'] for row in conn.execute('SELECT korean FROM words')}
+        """)
+        existing_words = {
+            row["korean"] for row in conn.execute("SELECT korean FROM words")
+        }
         for word in WORDS_SEED:
-            if word['korean'] not in existing_words:
+            if word["korean"] not in existing_words:
                 conn.execute(
-                    'INSERT INTO words (korean, english, emoji, category) VALUES (?, ?, ?, ?)',
-                    (word['korean'], word['english'], word['emoji'], word['category'])
+                    "INSERT INTO words (korean, english, emoji, category) VALUES (?, ?, ?, ?)",
+                    (word["korean"], word["english"], word["emoji"], word["category"]),
                 )
     # 기존 DB 마이그레이션: scene_data 및 is_read 컬럼 추가
     try:
@@ -149,28 +151,29 @@ def init_db():
 
 # ─── CRUD Helpers ────────────────────────────────────────────────────────────
 
+
 def get_random_word():
     with get_db() as conn:
-        row = conn.execute('SELECT * FROM words ORDER BY RANDOM() LIMIT 1').fetchone()
+        row = conn.execute("SELECT * FROM words ORDER BY RANDOM() LIMIT 1").fetchone()
         return dict(row) if row else None
 
 
 def get_word(word_id):
     with get_db() as conn:
-        row = conn.execute('SELECT * FROM words WHERE id=?', (word_id,)).fetchone()
+        row = conn.execute("SELECT * FROM words WHERE id=?", (word_id,)).fetchone()
         return dict(row) if row else None
 
 
 def get_all_words():
     with get_db() as conn:
-        rows = conn.execute('SELECT * FROM words ORDER BY category, korean').fetchall()
+        rows = conn.execute("SELECT * FROM words ORDER BY category, korean").fetchall()
         return [dict(r) for r in rows]
 
 
 def get_words_with_latest_drawing():
     """모든 단어 + 각 단어의 최신 그림(없으면 None)을 반환합니다."""
     with get_db() as conn:
-        rows = conn.execute('''
+        rows = conn.execute("""
             SELECT w.id, w.korean, w.english, w.emoji, w.category,
                    d.id   AS drawing_id,
                    d.file_path AS drawing_path,
@@ -182,7 +185,7 @@ def get_words_with_latest_drawing():
                   SELECT MAX(d2.created_at) FROM drawings d2 WHERE d2.word_id = w.id
               )
             ORDER BY w.category, w.korean
-        ''').fetchall()
+        """).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -190,12 +193,12 @@ def get_words_by_ids(word_ids):
     """word_id 목록으로 단어 정보를 반환합니다 (순서 보존)."""
     if not word_ids:
         return []
-    placeholders = ','.join('?' * len(word_ids))
+    placeholders = ",".join("?" * len(word_ids))
     with get_db() as conn:
         rows = conn.execute(
-            f'SELECT * FROM words WHERE id IN ({placeholders})', word_ids
+            f"SELECT * FROM words WHERE id IN ({placeholders})", word_ids
         ).fetchall()
-        rows_map = {row['id']: dict(row) for row in rows}
+        rows_map = {row["id"]: dict(row) for row in rows}
         return [rows_map[i] for i in word_ids if i in rows_map]
 
 
@@ -203,9 +206,10 @@ def get_latest_drawings_for_words(word_ids):
     """word_id 목록에서 각 단어의 최신 그림을 반환합니다 (그림 없는 단어는 제외)."""
     if not word_ids:
         return []
-    placeholders = ','.join('?' * len(word_ids))
+    placeholders = ",".join("?" * len(word_ids))
     with get_db() as conn:
-        rows = conn.execute(f'''
+        rows = conn.execute(
+            f"""
             SELECT d.id, d.word_id, d.image_data, d.file_path, d.created_at,
                    w.korean, w.english, w.emoji
             FROM drawings d JOIN words w ON d.word_id = w.id
@@ -213,8 +217,10 @@ def get_latest_drawings_for_words(word_ids):
               AND d.created_at = (
                   SELECT MAX(d2.created_at) FROM drawings d2 WHERE d2.word_id = d.word_id
               )
-        ''', word_ids).fetchall()
-        rows_map = {row['word_id']: dict(row) for row in rows}
+        """,
+            word_ids,
+        ).fetchall()
+        rows_map = {row["word_id"]: dict(row) for row in rows}
         # word_ids 순서를 유지하되 그림 없는 단어는 None으로
         return [rows_map.get(wid) for wid in word_ids]
 
@@ -222,118 +228,147 @@ def get_latest_drawings_for_words(word_ids):
 def save_drawing(word_id, image_data, file_path=None):
     with get_db() as conn:
         cursor = conn.execute(
-            'INSERT INTO drawings (word_id, image_data, file_path) VALUES (?, ?, ?)',
-            (word_id, image_data, file_path)
+            "INSERT INTO drawings (word_id, image_data, file_path) VALUES (?, ?, ?)",
+            (word_id, image_data, file_path),
         )
         return cursor.lastrowid
 
 
 def get_all_drawings():
     with get_db() as conn:
-        rows = conn.execute('''
+        rows = conn.execute("""
             SELECT d.id, d.word_id, d.file_path, d.created_at,
                    w.korean, w.english, w.emoji, w.category
             FROM drawings d JOIN words w ON d.word_id = w.id
             ORDER BY w.korean ASC
-        ''').fetchall()
+        """).fetchall()
         return [dict(r) for r in rows]
 
 
 def delete_drawing(drawing_id):
     with get_db() as conn:
-        conn.execute('DELETE FROM drawings WHERE id=?', (drawing_id,))
+        conn.execute("DELETE FROM drawings WHERE id=?", (drawing_id,))
 
 
 def get_drawing_by_word_id(word_id):
     with get_db() as conn:
         row = conn.execute(
-            'SELECT * FROM drawings WHERE word_id=? ORDER BY created_at DESC LIMIT 1',
-            (word_id,)
+            "SELECT * FROM drawings WHERE word_id=? ORDER BY created_at DESC LIMIT 1",
+            (word_id,),
         ).fetchone()
         return dict(row) if row else None
 
 
 def get_drawing_with_data(drawing_id):
     with get_db() as conn:
-        row = conn.execute('''
+        row = conn.execute(
+            """
             SELECT d.*, w.korean, w.english, w.emoji
             FROM drawings d JOIN words w ON d.word_id = w.id
             WHERE d.id=?
-        ''', (drawing_id,)).fetchone()
+        """,
+            (drawing_id,),
+        ).fetchone()
         return dict(row) if row else None
 
 
 def get_drawings_by_ids(drawing_ids):
     if not drawing_ids:
         return []
-    placeholders = ','.join('?' * len(drawing_ids))
+    placeholders = ",".join("?" * len(drawing_ids))
     with get_db() as conn:
-        rows = conn.execute(f'''
+        rows = conn.execute(
+            f"""
             SELECT d.id, d.word_id, d.image_data, d.file_path, d.created_at,
                    w.korean, w.english, w.emoji
             FROM drawings d LEFT JOIN words w ON d.word_id = w.id
             WHERE d.id IN ({placeholders})
-        ''', drawing_ids).fetchall()
+        """,
+            drawing_ids,
+        ).fetchall()
         # 선택 순서(drawing_ids 순서)를 유지하여 반환
-        rows_map = {row['id']: dict(row) for row in rows}
+        rows_map = {row["id"]: dict(row) for row in rows}
         return [rows_map[i] for i in drawing_ids if i in rows_map]
 
 
-def save_story(title, content, moral, keywords, drawing_ids,
-               illustration_path=None, audio_path=None, scene_data=None, layout_data=None):
+def save_story(
+    title,
+    content,
+    moral,
+    keywords,
+    drawing_ids,
+    illustration_path=None,
+    audio_path=None,
+    scene_data=None,
+    layout_data=None,
+):
     with get_db() as conn:
         cursor = conn.execute(
-            '''INSERT INTO stories
+            """INSERT INTO stories
                (title, content, moral, keywords, drawing_ids, illustration_path, audio_path, scene_data, layout_data)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (title, content, moral,
-             json.dumps(keywords, ensure_ascii=False),
-             json.dumps(drawing_ids),
-             illustration_path, audio_path,
-             json.dumps(scene_data, ensure_ascii=False) if scene_data else None,
-             json.dumps(layout_data, ensure_ascii=False) if layout_data else None)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                title,
+                content,
+                moral,
+                json.dumps(keywords, ensure_ascii=False),
+                json.dumps(drawing_ids),
+                illustration_path,
+                audio_path,
+                json.dumps(scene_data, ensure_ascii=False) if scene_data else None,
+                json.dumps(layout_data, ensure_ascii=False) if layout_data else None,
+            ),
         )
         return cursor.lastrowid
 
 
 def get_story(story_id):
     with get_db() as conn:
-        row = conn.execute('SELECT * FROM stories WHERE id=?', (story_id,)).fetchone()
+        row = conn.execute("SELECT * FROM stories WHERE id=?", (story_id,)).fetchone()
         if not row:
             return None
         story = dict(row)
-        story['keywords'] = json.loads(story['keywords'])
-        story['drawing_ids'] = json.loads(story['drawing_ids'])
-        story['scene_data'] = json.loads(story['scene_data']) if story.get('scene_data') else None
-        story['layout_data'] = json.loads(story['layout_data']) if story.get('layout_data') else None
+        story["keywords"] = json.loads(story["keywords"])
+        story["drawing_ids"] = json.loads(story["drawing_ids"])
+        story["scene_data"] = (
+            json.loads(story["scene_data"]) if story.get("scene_data") else None
+        )
+        story["layout_data"] = (
+            json.loads(story["layout_data"]) if story.get("layout_data") else None
+        )
         return story
 
 
 def get_all_stories():
     with get_db() as conn:
-        rows = conn.execute('SELECT * FROM stories ORDER BY created_at DESC').fetchall()
+        rows = conn.execute("SELECT * FROM stories ORDER BY created_at DESC").fetchall()
         result = []
         for row in rows:
             s = dict(row)
-            s['keywords'] = json.loads(s['keywords'])
-            s['drawing_ids'] = json.loads(s['drawing_ids'])
-            s['scene_data'] = json.loads(s['scene_data']) if s.get('scene_data') else None
-            s['layout_data'] = json.loads(s['layout_data']) if s.get('layout_data') else None
+            s["keywords"] = json.loads(s["keywords"])
+            s["drawing_ids"] = json.loads(s["drawing_ids"])
+            s["scene_data"] = (
+                json.loads(s["scene_data"]) if s.get("scene_data") else None
+            )
+            s["layout_data"] = (
+                json.loads(s["layout_data"]) if s.get("layout_data") else None
+            )
             result.append(s)
         return result
 
 
 def delete_story(story_id):
     with get_db() as conn:
-        conn.execute('DELETE FROM stories WHERE id=?', (story_id,))
+        conn.execute("DELETE FROM stories WHERE id=?", (story_id,))
 
 
 def mark_story_read(story_id):
     with get_db() as conn:
-        conn.execute('UPDATE stories SET is_read = 1 WHERE id=?', (story_id,))
+        conn.execute("UPDATE stories SET is_read = 1 WHERE id=?", (story_id,))
+
 
 def get_story_count():
     """전체 생성된 동화책의 개수를 반환합니다."""
     with get_db() as conn:
-        row = conn.execute('SELECT COUNT(*) FROM stories').fetchone()
+        row = conn.execute("SELECT COUNT(*) FROM stories").fetchone()
         return row[0] if row else 0
