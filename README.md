@@ -149,7 +149,7 @@ sequenceDiagram
     participant TTS as tts_service
     participant DB as database
 
-    사용자->>FE: 그림 1~4개 선택 후 동화 만들기
+    사용자->>FE: 그림 1~5개 선택 후 동화 만들기
     FE->>BE: POST /api/story/generate
     BE->>AI: generate_fairy_tale(keywords, drawings)
     AI->>AI: Gemini 2.5 Flash Vision
