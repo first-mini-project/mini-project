@@ -27,13 +27,23 @@ def _has_rieul_batchim(char: str) -> bool:
     return False
 
 
-def _fix_korean_particles(text: str) -> str:
+def _fix_korean_particles(text: str, protect_words: list = None) -> str:
     """한국어 조사를 올바르게 교정합니다.
 
     교정 항목:
     - 은/는, 이/가, 을/를, 과/와, 으로/로, 이나/나, 이랑/랑
     - 연속 나열 패턴: "A가 B가" → "A과/와 B가"
+    protect_words: 수정하면 안 되는 단어 목록 (예: 사과, 고양이 등 원래 키워드)
     """
+    # 보호 단어를 플레이스홀더로 임시 대체 (과/와 오탐 방지: "사과" → "사와" 같은 버그)
+    placeholders = {}
+    if protect_words:
+        for i, word in enumerate(protect_words or []):
+            if word and word in text:
+                ph = f"\x00KW{i}\x00"
+                text = text.replace(word, ph)
+                placeholders[ph] = word
+
     # 조사 뒤에 공백·문장부호·줄바꿈·문자열 끝이 오는 경우만 교정 (복합어 오탐 방지)
     B = r"(?=[\s,.!?。、\n\'\"]|$)"
 
@@ -119,12 +129,19 @@ def _fix_korean_particles(text: str) -> str:
 
     text = re.sub(r"([가-힣])([을를])" + B, _fix_eul_reul, text)
 
-    # 과/와
+    # 과/와 — 잘못된 경우만 교정 (올바른 경우 그대로 유지)
     def _fix_gwa_wa(m):
-        char = m.group(1)
-        return char + ("과" if _has_batchim(char) else "와")
+        word, particle = m.group(1), m.group(2)
+        correct = "과" if _has_batchim(word[-1]) else "와"
+        if particle == correct:
+            return m.group(0)  # 이미 맞으면 건드리지 않음
+        return word + correct
 
-    text = re.sub(r"([가-힣])([과와])" + B, _fix_gwa_wa, text)
+    text = re.sub(r"([가-힣]+)([과와])" + B, _fix_gwa_wa, text)
+
+    # 보호 단어 복원
+    for ph, word in placeholders.items():
+        text = text.replace(ph, word)
 
     return text
 
@@ -230,20 +247,18 @@ def _build_prompt(
     other_kws = [kw for kw in keywords if kw != protagonist_kw]
     if protagonist_kw:
         other_note = (
-            (
-                f"\nAll Keywords Required: 나머지 단어 [{', '.join(other_kws)}]도 반드시 이야기 안에 등장해야 한다."
-                f" 사물은 소품·배경 요소로, 조연 캐릭터는 이야기 속에서 **'{protagonist_kw}'**와 상호작용하는 역할로 활용하라."
-            )
+            f"\n⚠️⚠️ 나머지 단어 [{', '.join(other_kws)}]도 반드시 이야기 안에 등장해야 합니다."
+            f" 사물은 소품·배경 요소로, 조연은 '{protagonist_kw}'와 상호작용하는 역할로 활용하세요."
             if other_kws
             else ""
         )
         protagonist_block = f"""
-━━ 🌟 주인공 지정 (사용자가 선택) ━━
-Primary Protagonist: 이 동화의 유일한 주인공은 **'{protagonist_kw}'**이다.
-Narrative Anchor: 모든 이야기의 전개, 갈등 해결, 결말은 반드시 **'{protagonist_kw}'**를 중심으로 이루어져야 한다.
-Character Identity: **'{protagonist_kw}'**가 생물이든 무생물이든 관념이든 상관없이 의인화하거나 서사의 주체로 설정하여 주인공의 지위를 부여하라.
-No Sidekick Takeover: 다른 조연 캐릭터가 등장하더라도 결코 **'{protagonist_kw}'**보다 비중이 커지거나 주인공 역할을 대신해서는 안 된다.
-Cover Illustration: 표지 배경 이미지는 반드시 주인공 **'{protagonist_kw}'**가 가장 크고 명확하게 보이는 장면으로 묘사하라.{other_note}"""
+⚠️⚠️ 주인공 지정 (절대 규칙) ⚠️⚠️
+1. 이 동화의 유일한 주인공은 반드시 '{protagonist_kw}'이어야 합니다.
+2. 첫 번째 장면에서 반드시 '{protagonist_kw}'가 등장해야 합니다.
+3. 모든 사건·갈등·결말은 '{protagonist_kw}'를 중심으로 전개되어야 합니다.
+4. 어떤 조연 캐릭터도 '{protagonist_kw}'보다 이야기 비중이 커지면 안 됩니다.
+5. 표지(cover_bg) 설명은 반드시 '{protagonist_kw}'가 가장 크고 뚜렷하게 보이는 장면으로 묘사하세요.{other_note}"""
     else:
         protagonist_block = ""
 
@@ -265,8 +280,12 @@ Cover Illustration: 표지 배경 이미지는 반드시 주인공 **'{protagoni
         f" 'magical glowing mushroom forest')"
     )
 
+    # 주인공 지정 시 장르 설명도 주인공 중심으로 패치
+    if protagonist_kw:
+        genre_desc = genre_desc.replace("주인공", f"'{protagonist_kw}'")
+
     return f"""당신은 4~7세 한국 어린이를 위한 창의적인 동화 작가입니다.
-{protagonist_block}
+
 ━━ 이번 이야기 설정 (반드시 따르세요) ━━
 🌍 세계관: {world_name}
    배경 분위기: {world_desc}
@@ -279,8 +298,12 @@ Cover Illustration: 표지 배경 이미지는 반드시 주인공 **'{protagoni
 - 위 세계관과 장르를 정확히 따라야 합니다 (자의적으로 바꾸지 마세요)
 - ⚠️ 위 단어 [{kw_list}] 은 모두 반드시 장면(text) 안에 직접 등장해야 합니다
   단어를 빠뜨리면 안 됩니다. 4개 단락에 골고루 분산하세요
-- 캐릭터에게 이름을 붙일 경우, 반드시 매 장면(text)마다 원래 단어를 최소 1회 포함하세요
-  예) "콩이 토끼는...", "토끼 콩이가..." — 이름만 단독으로 쓰면 안 됩니다
+- ⚠️ 캐릭터에게 이름을 붙인 경우: 첫 번째 등장 문장에서 반드시 "[원래단어] [이름]은/는" 형식으로 소개하세요
+  예) 구름→알록이: "구름 알록이는 하늘을 날았어요" (O) / "알록이는 하늘을 날았어요" (X — 정체 불명)
+  예) 나무→땅땅 할아버지: "나무 땅땅 할아버지는 오래된 숲에 살았어요" (O)
+  두 번째 장면부터는 이름만 단독으로 쓰세요. 같은 문장에 원래 단어와 이름을 함께 쓰지 마세요
+  예) "알록이가 웃었어요" (O) / "구름 알록이가 웃었어요" (X — 2회 이후 중복 금지)
+- 캐릭터 이름은 명사형으로만 짓고, 동사/형용사처럼 들리는 이름은 금지합니다
 - 단어들이 서로 만나고, 상호작용하며 이야기가 전개되어야 합니다
 
 작성 규칙:
@@ -288,7 +311,7 @@ Cover Illustration: 표지 배경 이미지는 반드시 주인공 **'{protagoni
 2. 각 단락의 배경 장면을 영어로 한 줄 설명 (이미지 생성용)
 3. 4~7세 어린이 말투, 해피엔딩
 4. 교훈 한 줄
-
+{protagonist_block}
 반드시 아래 JSON 형식으로만 응답 (추가 설명 없이):
 {{
   "title": "동화 제목 (10자 이내)",
@@ -303,10 +326,14 @@ Cover Illustration: 표지 배경 이미지는 반드시 주인공 **'{protagoni
 }}
 ⚠️ name_map과 present는 반드시 출력해야 하는 필수 필드입니다.
 ※ name_map: 캐릭터에게 이름을 붙인 경우 반드시 기입. 예) {{"나무": "고목 할아버지", "토끼": "콩이"}}. 이름 없으면 빈 객체 {{}}
-※ present: 각 장면마다 반드시 작성. 해당 장면에 직접 등장해 행동·상호작용하는 경우만 포함. **장면당 최대 2개**.
+※ present: 각 장면마다 반드시 작성. 해당 장면 text에 이름이나 원래 단어가 직접 등장하는 캐릭터를 빠짐없이 포함.
+  - ⚠️ text에서 "A와 B는 C를 만났어요" 형태면 A, B, C 모두 present에 포함해야 합니다 (누락 금지)
   - 원래 단어 또는 name_map의 캐릭터 이름 중 하나를 일관되게 사용 (섞어 쓰지 말 것)
+  - ⚠️ present에는 반드시 원래 단어 전체를 정확하게 써야 합니다 (단축 금지: "뭉게구름" → "뭉게" X)
   - 유사 단어 사용 금지 (예: 왕관→왕국 금지)
-  - 3개 이상의 캐릭터가 같은 장면에 등장하지 않도록 이야기를 구성하세요
+  - ⚠️ bg(배경)에만 등장하거나 언급만 되는 캐릭터는 present에 포함하지 마세요
+    예) 동굴 배경 속 불꽃 도마뱀 → bg에만 묘사, present에는 미포함
+    예) "저 멀리 산이 보였어요" → 산은 present 미포함
   - 예) "고목 할아버지가 손을 흔들었어요" → present에 "고목 할아버지" 또는 "나무" 포함
   - 예) "나무가 알려준 지도를 꺼냈어요" → present에 나무 미포함 (직접 등장 아님)"""
 
@@ -320,7 +347,7 @@ def _strip_markdown(text: str) -> str:
     return text
 
 
-def _parse_result(response_text: str) -> dict:
+def _parse_result(response_text: str, keywords: list = None) -> dict:
     """LLM 응답 텍스트에서 JSON을 추출하고 scene_data/content를 정리합니다."""
     text = response_text.strip()
     if "```json" in text:
@@ -337,20 +364,23 @@ def _parse_result(response_text: str) -> dict:
     else:
         result["scene_data"] = None
 
-    # 마크다운 제거 후 조사 맞춤법 교정
+    # 마크다운 제거 후 조사 맞춤법 교정 (keywords 보호: "사과" → "사와" 방지)
+    def fix(t):
+        return _fix_korean_particles(_strip_markdown(t), protect_words=keywords)
+
     if result.get("title"):
-        result["title"] = _fix_korean_particles(_strip_markdown(result["title"]))
+        result["title"] = fix(result["title"])
     if result.get("scene_data"):
         for scene in result["scene_data"]:
             if scene.get("text"):
-                scene["text"] = _fix_korean_particles(_strip_markdown(scene["text"]))
+                scene["text"] = fix(scene["text"])
         result["content"] = "\n\n".join(
             s["text"] for s in result["scene_data"] if s.get("text")
         )
     elif result.get("content"):
-        result["content"] = _fix_korean_particles(_strip_markdown(result["content"]))
+        result["content"] = fix(result["content"])
     if result.get("moral"):
-        result["moral"] = _fix_korean_particles(_strip_markdown(result["moral"]))
+        result["moral"] = fix(result["moral"])
 
     return result
 
@@ -415,14 +445,14 @@ def _generate_with_gemini(
             parts.append(types.Part.from_text(text=prompt))
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=parts,
             config=types.GenerateContentConfig(
                 temperature=0.9,
-                max_output_tokens=1024,
+                max_output_tokens=2048,
             ),
         )
-        return _parse_result(response.text)
+        return _parse_result(response.text, keywords=keywords)
 
     except Exception as e:
         print(f"[Gemini API 오류] {e}")
@@ -479,7 +509,7 @@ def _generate_with_claude(
             max_tokens=1024,
             messages=[{"role": "user", "content": content}],
         )
-        return _parse_result(message.content[0].text)
+        return _parse_result(message.content[0].text, keywords=keywords)
 
     except Exception as e:
         print(f"[Claude API 오류] {e}")

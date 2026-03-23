@@ -280,6 +280,12 @@
     "비",
   ]);
 
+  // 텍스트 맥락 무관하게 항상 지상에 배치되는 키워드
+  const ALWAYS_GROUND_KW = new Set([
+    "나무", "꽃", "집", "산", "성", "탑", "다리", "마을", "동굴",
+    "버섯", "풀", "바위", "강", "연못", "나뭇잎", "씨앗",
+  ]);
+
   // 텍스트 맥락에서 "땅에 내려온" 하늘 키워드 감지
   const GROUNDED_PHRASES = [
     "내려왔",
@@ -306,6 +312,7 @@
 
   function isSky(d, sceneText) {
     if (!d) return false;
+    if (ALWAYS_GROUND_KW.has(d.korean)) return false;
     const isSkyKw = SKY_KW.has(d.korean);
     if (!sceneText) return isSkyKw;
 
@@ -492,20 +499,26 @@
     const isSub = extraClass === "ground-sub" || extraClass === "ground-pair-r";
     const isPair =
       extraClass === "ground-pair-l" || extraClass === "ground-pair-r";
-    const imgCls = isSub ? "drawing-img sub-img" : "drawing-img";
-    // vh 기반 크기 — 화면 크기에 비례 (scale 수식어 반영)
-    // ground-pair-l: 기본 38vh, ground-pair-r/sub: 32vh, 단독: 44vh
-    const baseH = isPair
-      ? extraClass === "ground-pair-l"
-        ? 38
-        : 32
-      : isSub
-        ? 32
-        : 44;
+    const isTrio =
+      extraClass === "ground-trio-l" ||
+      extraClass === "ground-trio-c" ||
+      extraClass === "ground-trio-r";
+    const isQuad  = extraClass.startsWith("ground-quad-");
+    const isQuint = extraClass.startsWith("ground-quint-");
+    const isSmall = isSub || isTrio || isQuad || isQuint;
+    const imgCls = isSmall ? "drawing-img sub-img" : "drawing-img";
+    // vh 기반 크기
+    const baseH = isQuint ? 22
+      : isQuad ? 26
+      : isTrio
+        ? extraClass === "ground-trio-c" ? 38 : extraClass === "ground-trio-l" ? 36 : 30
+        : isPair
+          ? extraClass === "ground-pair-l" ? 38 : 32
+          : isSub ? 32 : 44;
     const h = (baseH * scale).toFixed(1);
     const sizeStyle = `style="max-height:${h}vh"`;
-    // ground-pair 클래스는 'ground' 없이 독립 사용 (CSS right:0 충돌 방지)
-    const stageClass = isPair
+    // pair/trio/quad/quint 클래스는 'ground' 없이 독립 사용 (CSS 충돌 방지)
+    const stageClass = isPair || isTrio || isQuad || isQuint
       ? `drawing-stage ${extraClass}`
       : `drawing-stage ground${extraClass ? " " + extraClass : ""}`;
     return `<div class="${stageClass}">
@@ -535,12 +548,12 @@
     return `<div class="drawing-emoji-fallback">${d.emoji || "🎨"}</div>`;
   }
 
-  function makeDrawingPageHTML(primary, secondary, scene) {
+  function makeDrawingPageHTML(primary, secondary, scene, tertiary, quaternary, quinary) {
     const bgText = scene && scene.bg ? scene.bg : "";
     const sceneText = scene && scene.text ? scene.text : "";
     const kwList = [
-      ...(primary ? [primary.korean] : []),
-      ...(secondary ? [secondary.korean] : []),
+      ...[primary, secondary, tertiary, quaternary, quinary]
+        .filter(Boolean).map((d) => d.korean),
       ...keywords,
     ];
     const theme = getTheme(bgText, kwList);
@@ -566,38 +579,39 @@
       ${deco}
       <div class="scene-vignette"></div>`;
 
-    if (!primary && !secondary) {
-      // 그림 없음
-    } else if (!secondary) {
-      const pc = skyClass(primary);
-      html += pc
-        ? skyStageHTML(primary, pc, pScale)
-        : groundStageHTML(primary, "", pScale);
-    } else {
-      const pSkyClass = skyClass(primary);
-      const sSkyClass = skyClass(secondary);
-      if (!pSkyClass && sSkyClass) {
-        html +=
-          groundStageHTML(primary, "", pScale) +
-          skyStageHTML(secondary, sSkyClass, sScale);
-      } else if (pSkyClass && !sSkyClass) {
-        html +=
-          groundStageHTML(secondary, "", sScale) +
-          skyStageHTML(primary, pSkyClass, pScale);
-      } else if (!pSkyClass && !sSkyClass) {
-        // 두 지상 그림 → 나란히 배치 (주인공 왼쪽, 보조 오른쪽)
-        html +=
-          groundStageHTML(primary, "ground-pair-l", pScale) +
-          groundStageHTML(secondary, "ground-pair-r", sScale);
-      } else {
-        // secondary가 dream 맥락이면 sky-right에도 dream 효과 적용
-        const secSkyClass =
-          sSkyClass === "dream" ? "sky-right dream" : "sky-right";
-        html +=
-          skyStageHTML(primary, pSkyClass, pScale) +
-          skyStageHTML(secondary, secSkyClass, sScale);
-      }
-    }
+    // 모든 슬롯 스케일 계산
+    const scaledList = [
+      { d: primary,    baseScale: pScale },
+      { d: secondary,  baseScale: sScale },
+      { d: tertiary,   baseScale: tertiary   ? Math.min(getDrawingScale(tertiary.korean,   sceneText), pScale * 0.75) : 1 },
+      { d: quaternary, baseScale: quaternary ? Math.min(getDrawingScale(quaternary.korean, sceneText), pScale * 0.70) : 1 },
+      { d: quinary,    baseScale: quinary    ? Math.min(getDrawingScale(quinary.korean,    sceneText), pScale * 0.65) : 1 },
+    ].filter((e) => e.d);
+
+    const groundList = scaledList.filter((e) => !skyClass(e.d));
+    const skyList    = scaledList.filter((e) =>  skyClass(e.d));
+
+    // 지상 캐릭터 배치
+    const GROUND_LAYOUTS = {
+      1: [""],
+      2: ["ground-pair-l", "ground-pair-r"],
+      3: ["ground-trio-l", "ground-trio-c", "ground-trio-r"],
+      4: ["ground-quad-1", "ground-quad-2", "ground-quad-3", "ground-quad-4"],
+      5: ["ground-quint-1", "ground-quint-2", "ground-quint-3", "ground-quint-4", "ground-quint-5"],
+    };
+    const shrink = [1, 1, 1, 0.88, 0.80]; // 인원수에 따라 전체 축소 비율
+    const classes = GROUND_LAYOUTS[Math.min(groundList.length, 5)] || [];
+    groundList.forEach((e, i) => {
+      html += groundStageHTML(e.d, classes[i] || "", e.baseScale * (shrink[groundList.length - 1] ?? 0.75));
+    });
+
+    // 하늘 캐릭터 배치
+    skyList.forEach(({ d, baseScale }, i) => {
+      const cls = skyClass(d);
+      const posCls = i === 0 ? cls : (cls === "dream" ? "sky-right dream" : "sky-right");
+      html += skyStageHTML(d, posCls, baseScale);
+    });
+
     return html;
   }
 
@@ -711,7 +725,8 @@
           return `<div style="${wrapStyle}">
           <img src="${src}" alt="${d.korean || ""}"
             style="max-width:70%;max-height:70%;object-fit:contain;transform:rotate(${rot}deg);filter:drop-shadow(0 3px 10px rgba(0,0,0,0.25));"
-            onerror="this.style.display='none'">
+            onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+          <span style="display:none;font-size:2.5rem;transform:rotate(${rot}deg)">${d.emoji || "🎨"}</span>
         </div>`;
         })
         .join("");
@@ -762,44 +777,43 @@
       // 2단계: 그림 배분 계산 (모든 그림 최소 1회 보장)
       const shownIds = new Set();
       const assignments = contentItems.map(({ spec, text }) => {
-        let primary = spec.primaryDrawingId
-          ? pDrawings.find((d) => d.id === spec.primaryDrawingId)
-          : null;
-        let secondary = spec.secondaryDrawingId
-          ? pDrawings.find((d) => d.id === spec.secondaryDrawingId)
-          : null;
+        const find = (id) => id ? pDrawings.find((d) => d.id === id) : null;
+        let primary    = find(spec.primaryDrawingId);
+        let secondary  = find(spec.secondaryDrawingId);
+        let tertiary   = find(spec.tertiaryDrawingId);
+        let quaternary = find(spec.quaternaryDrawingId);
+        let quinary    = find(spec.quinaryDrawingId);
         if (!primary || !secondary) {
           const hits = mentioned(text, pDrawings);
           const used = new Set(
-            [primary && primary.id, secondary && secondary.id].filter(Boolean),
+            [primary, secondary, tertiary, quaternary, quinary]
+              .filter(Boolean).map((d) => d.id),
           );
           const extra = hits.filter((d) => !used.has(d.id));
-          if (!primary && extra.length > 0) primary = extra[0];
-          else if (!secondary && extra.length > 0) secondary = extra[0];
+          if (!primary && extra.length > 0) primary = extra.shift();
+          if (!secondary && extra.length > 0) secondary = extra.shift();
         }
-        if (primary) shownIds.add(primary.id);
-        if (secondary) shownIds.add(secondary.id);
-        return { primary, secondary };
+        [primary, secondary, tertiary, quaternary, quinary]
+          .filter(Boolean).forEach((d) => shownIds.add(d.id));
+        return { primary, secondary, tertiary, quaternary, quinary };
       });
 
-      // 3단계: 미노출 그림을 빈 슬롯에 분배
+      // 3단계: 미노출 그림을 빈 슬롯에 분배 (secondary → tertiary → quaternary → quinary → primary)
+      const SLOTS = ["secondary", "tertiary", "quaternary", "quinary", "primary"];
       for (const d of pDrawings.filter((d) => !shownIds.has(d.id))) {
-        let placed = false;
-        for (const a of assignments) {
-          if (!a.secondary && (!a.primary || a.primary.id !== d.id)) {
-            // 같은 그림 중복 방지
-            a.secondary = d;
-            placed = true;
-            break;
-          }
-        }
-        if (!placed) {
+        for (const slot of SLOTS) {
+          let placed = false;
           for (const a of assignments) {
-            if (!a.primary) {
-              a.primary = d;
-              break;
+            if (!a[slot]) {
+              const occupied = SLOTS.map((s) => a[s]).filter(Boolean).map((x) => x.id);
+              if (!occupied.includes(d.id)) {
+                a[slot] = d;
+                placed = true;
+                break;
+              }
             }
           }
+          if (placed) break;
         }
       }
 
@@ -819,10 +833,10 @@
           });
         } else if (spec.type === "content") {
           const { scene, text } = contentItems[ci];
-          const { primary, secondary } = assignments[ci];
+          const { primary, secondary, tertiary, quaternary, quinary } = assignments[ci];
           ci++;
           pages.push({
-            leftHTML: makeDrawingPageHTML(primary, secondary, scene),
+            leftHTML: makeDrawingPageHTML(primary, secondary, scene, tertiary, quaternary, quinary),
             rightInnerHTML: `<p class="story-text">${text}</p>`,
           });
         } else if (spec.type === "moral") {

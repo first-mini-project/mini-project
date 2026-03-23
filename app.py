@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import uuid
 import base64
@@ -404,32 +405,72 @@ def api_generate_story():
                 mentioned_ids = []
                 seen_ids = set()
                 for kw in present_kws:
-                    did = kw_to_id.get(kw) or char_name_to_id.get(
-                        kw
-                    )  # 원래 단어 또는 캐릭터 이름 모두 허용
+                    # 1) 정확 매칭 (원래 키워드 또는 캐릭터 이름)
+                    did = kw_to_id.get(kw) or char_name_to_id.get(kw)
+                    # 2) 조사 제거 후 재시도 ("냥이가" → "냥이", "뭉게구름은" → "뭉게구름")
+                    stripped = re.sub(
+                        r"(이가|가|이는|는|이를|를|을|이와|이과|와|과|에서|에게|에|의|도|이랑|랑|으로|로|이나|나|이다|다)$",
+                        "",
+                        kw,
+                    )
+                    if not did and stripped != kw:
+                        did = kw_to_id.get(stripped) or char_name_to_id.get(stripped)
+                    # 3) 부분 매칭: AI가 단축형 반환 시 ("뭉게" → "뭉게구름")
+                    if not did:
+                        base = stripped
+                        for full_kw, kid in kw_to_id.items():
+                            if base in full_kw or full_kw in base:
+                                did = kid
+                                break
+                        if not did:
+                            for char_name, kid in char_name_to_id.items():
+                                if base in char_name or char_name in base:
+                                    did = kid
+                                    break
                     if did and did not in seen_ids:
+                        mentioned_ids.append(did)
+                        seen_ids.add(did)
+
+                # present 처리 후, 텍스트에 등장하지만 누락된 그림 보완
+                # (AI가 present에서 빠뜨린 경우 — 예: "우주선을 만들었어요"에서 우주선 누락)
+                scene_text = scene.get("text", "")
+                remaining = [d for d in drawings if d["id"] not in seen_ids]
+                for did in find_mentioned_drawings(scene_text, remaining):
+                    if did not in seen_ids:
                         mentioned_ids.append(did)
                         seen_ids.add(did)
             else:
                 mentioned_ids = find_mentioned_drawings(scene.get("text", ""), drawings)
 
-            primary_id = mentioned_ids[0] if len(mentioned_ids) > 0 else None
-            secondary_id = mentioned_ids[1] if len(mentioned_ids) > 1 else None
+            # 4개 이상일 때 주인공 그림을 맨 앞으로 보장
+            if protagonist_id and protagonist_id in mentioned_ids:
+                idx = mentioned_ids.index(protagonist_id)
+                if idx > 0:
+                    mentioned_ids.insert(0, mentioned_ids.pop(idx))
+
+            primary_id    = mentioned_ids[0] if len(mentioned_ids) > 0 else None
+            secondary_id  = mentioned_ids[1] if len(mentioned_ids) > 1 else None
+            tertiary_id   = mentioned_ids[2] if len(mentioned_ids) > 2 else None
+            quaternary_id = mentioned_ids[3] if len(mentioned_ids) > 3 else None
+            quinary_id    = mentioned_ids[4] if len(mentioned_ids) > 4 else None
 
             print(f"[장면 {i+1}] 텍스트: {(scene.get('text') or '')[:40]}...")
             print(
                 f"         present={present_kws} → {[id_to_kw.get(mid) for mid in mentioned_ids]}"
             )
             print(
-                f"         → primary={id_to_kw.get(primary_id)}, secondary={id_to_kw.get(secondary_id)}"
+                f"         → {[id_to_kw.get(x) for x in [primary_id, secondary_id, tertiary_id, quaternary_id, quinary_id] if x]}"
             )
 
             layout_spreads.append(
                 {
                     "type": "content",
                     "sceneIdx": i,
-                    "primaryDrawingId": primary_id,
-                    "secondaryDrawingId": secondary_id,
+                    "primaryDrawingId":    primary_id,
+                    "secondaryDrawingId":  secondary_id,
+                    "tertiaryDrawingId":   tertiary_id,
+                    "quaternaryDrawingId": quaternary_id,
+                    "quinaryDrawingId":    quinary_id,
                     "mergedImage": scene.get("merged_image") if scene else None,
                     "textPageNum": i + 1,
                 }

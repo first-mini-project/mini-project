@@ -3,9 +3,13 @@ import uuid
 import requests
 import base64
 import sys
+import warnings
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image, ImageOps
+
+# SD 파이프라인 safety_checker 경고 억제 (로컬 전용 앱)
+warnings.filterwarnings("ignore", message=".*safety_checker.*")
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config import Config
