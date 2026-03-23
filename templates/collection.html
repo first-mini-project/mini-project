@@ -3,6 +3,14 @@
 {% block nav_title %}그림 모음장 🖼️{% endblock %}
 
 {% block content %}
+<div class="page-deco" style="top:15%;left:1%;--r0:-8deg;--r1:8deg;--dy:-18px;animation-duration:5s">🖼️</div>
+<div class="page-deco" style="top:35%;left:1%;--r0:5deg;--r1:-8deg;--dy:-14px;animation-duration:6s;animation-delay:1s">🎨</div>
+<div class="page-deco" style="top:58%;left:1%;--r0:-5deg;--r1:8deg;--dy:-16px;animation-duration:4.5s;animation-delay:2s">⭐</div>
+<div class="page-deco" style="top:78%;left:1%;--r0:5deg;--r1:-5deg;--dy:-12px;animation-duration:5s;animation-delay:0.5s">✨</div>
+<div class="page-deco" style="top:15%;right:1%;--r0:8deg;--r1:-8deg;--dy:-18px;animation-duration:5.5s;animation-delay:0.5s">💫</div>
+<div class="page-deco" style="top:38%;right:1%;--r0:-5deg;--r1:8deg;--dy:-14px;animation-duration:4s;animation-delay:1.5s">🌟</div>
+<div class="page-deco" style="top:60%;right:1%;--r0:8deg;--r1:-5deg;--dy:-12px;animation-duration:5s;animation-delay:3s">🎀</div>
+<div class="page-deco" style="top:80%;right:1%;--r0:-5deg;--r1:8deg;--dy:-14px;animation-duration:4.5s;animation-delay:1s">🌈</div>
 <div class="container collection-page">
 
   <div class="collection-header fade-in">
@@ -24,7 +32,7 @@
   {% if drawings %}
   <div class="drawings-grid">
     {% for drawing in drawings %}
-    <div class="drawing-card fade-in" data-id="{{ drawing.id }}" data-word-id="{{ drawing.word_id }}" style="animation-delay: {{ loop.index0 * 0.05 }}">
+    <div class="drawing-card fade-in" data-id="{{ drawing.id }}" data-word-id="{{ drawing.word_id }}" style="animation-delay: {{ loop.index0 * 0.05 }}s">
       <div class="selected-badge">✓</div>
       <div class="card-actions">
         <a href="/draw/{{ drawing.word_id }}" class="card-action-btn edit-btn" title="다시 그리기">✏️</a>
