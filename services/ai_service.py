@@ -450,6 +450,7 @@ def _generate_with_gemini(
             config=types.GenerateContentConfig(
                 temperature=0.9,
                 max_output_tokens=2048,
+                response_mime_type="application/json",
             ),
         )
         return _parse_result(response.text, keywords=keywords)

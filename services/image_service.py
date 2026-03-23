@@ -226,28 +226,28 @@ def _get_pipe():
             _pipe_load_failed = True
             return None
 
-        # VRAM 여유 확인 (1.5GB 이상 필요 — sd-turbo는 약 2GB)
+        # VRAM 여유 확인 (3GB 이상 필요 — LCM-DreamShaper는 약 4GB)
         free_vram = torch.cuda.mem_get_info()[0] / (1024**3)  # GB 단위
-        if free_vram < 1.5:
+        if free_vram < 3.0:
             print(
                 f"[로컬 SD] VRAM 여유 부족 ({free_vram:.1f}GB) → Pollinations.ai 폴백 모드로 전환"
             )
             _pipe_load_failed = True
             return None
 
-        from diffusers import AutoPipelineForText2Image, EulerAncestralDiscreteScheduler
+        from diffusers import DiffusionPipeline, LCMScheduler
 
-        print("[로컬 SD] SD-Turbo (FP16) 파이프라인 로딩 중...")
+        print("[로컬 SD] LCM-DreamShaper v7 (FP16) 파이프라인 로딩 중...")
 
-        # SD-Turbo 파이프라인 로드 (SDXL보다 가볍고 빠름)
-        _pipe = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/sd-turbo", torch_dtype=torch.float16, variant="fp16"
+        # LCM-DreamShaper v7 로드
+        _pipe = DiffusionPipeline.from_pretrained(
+            "SimianLuo/LCM_Dreamshaper_v7",
+            torch_dtype=torch.float16,
+            safety_checker=None,
         ).to("cuda")
 
-        # 스케줄러 설정
-        _pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
-            _pipe.scheduler.config
-        )
+        # LCM 스케줄러 설정 (필수)
+        _pipe.scheduler = LCMScheduler.from_config(_pipe.scheduler.config)
 
         # VRAM 효율화
         try:
@@ -255,19 +255,7 @@ def _get_pipe():
         except:
             _pipe.enable_attention_slicing()
 
-        # TensorRT 기반 컴파일 적용 (선택 사항)
-        try:
-            import torch_tensorrt
-
-            print("[로컬 SD] TensorRT 엔진 컴파일 시도...")
-            _pipe.unet = torch.compile(
-                _pipe.unet, mode="reduce-overhead", backend="tensorrt"
-            )
-            print("[로컬 SD] TensorRT 컴파일 완료!")
-        except Exception as compile_err:
-            print(f"[로컬 SD] TensorRT 컴파일 생략: {compile_err}")
-
-        print("[로컬 SD] SD-Turbo 로딩 완료!")
+        print("[로컬 SD] LCM-DreamShaper v7 로딩 완료!")
 
     except Exception as e:
         print(f"[로컬 SD] 로딩 실패: {e} → Pollinations.ai 폴백 모드로 전환")
@@ -370,11 +358,11 @@ def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
     pipe = _get_pipe()
     if pipe is not None:
         try:
-            # SD-Turbo 스펙: 1~4 step
+            # LCM 스펙: 4~8 step, guidance_scale 1~2
             image = pipe(
                 prompt=positive,
-                num_inference_steps=1,
-                guidance_scale=0.0,
+                num_inference_steps=6,
+                guidance_scale=1.5,
                 height=512,
                 width=512,
             ).images[0]
@@ -460,39 +448,44 @@ def generate_reference_image(
     3순위: 로컬 SD-Turbo (인터넷 없을 때)
     Returns: base64 data URI string, or None on failure
     """
-    dalle_prompt = image_prompt if image_prompt else (
-        f"Children's coloring book illustration of a {english_word} ({korean_word}). "
-        f"Draw ONLY the {english_word}, nothing else. "
-        f"Style: thick bold black outline, flat bright colors, white background, "
-        f"very simple recognizable shape. "
-        f"The drawing must be immediately recognizable as a {english_word}. "
-        f"No characters, no people, no anthropomorphization, no background details. "
-        f"Simple enough for a 4-year-old child to trace and copy."
+    prompt = image_prompt or (
+        f"flat vector sticker icon of a {english_word}, "
+        f"single {english_word} object only, bold black outline, solid bright colors, "
+        f"pure white background, simple 2D flat design, instantly recognizable shape, "
+        f"no face, no eyes, no character, no kawaii"
     )
 
     flux_prompt = (
-        f"coloring book page, single {english_word}, "
-        f"simple flat illustration, thick black outline, bright colors, white background, "
-        f"recognizable {english_word} shape, no characters, no people, no background"
+        f"flat vector sticker icon of a {english_word}, "
+        f"single {english_word} only, bold black outline, solid bright flat colors, "
+        f"pure white background, simple 2D icon design, "
+        f"instantly recognizable {english_word} shape, sticker style"
     )
     flux_negative = (
-        "character, person, human, face, anthropomorphic, complex, detailed, "
-        "photorealistic, scary, dark, multiple objects, background elements, "
-        "3d render, photograph, watercolor, painting"
+        "character, person, human, face, eyes, mouth, nose, smile, kawaii, chibi, "
+        "anthropomorphic, cute character, holding, carrying, "
+        "complex background, detailed, photorealistic, 3d render, watercolor, painting, "
+        "multiple objects, text, scary, dark, shadow"
     )
 
     # 1순위: DALL-E 3
     if Config.OPENAI_API_KEY:
-        result = _generate_reference_dalle(dalle_prompt)
+        result = _generate_reference_dalle(prompt)
         if result:
             return result
 
-    # 2순위: Pollinations Flux
+    # 2순위: HuggingFace FLUX.1-schnell
+    if Config.HUGGINGFACE_API_KEY:
+        result = _generate_reference_hf(flux_prompt)
+        if result:
+            return result
+
+    # 3순위: Pollinations Flux
     result = _generate_reference_pollinations(flux_prompt, flux_negative, english_word)
     if result:
         return result
 
-    # 3순위: 로컬 SD-Turbo
+    # 4순위: 로컬 SD-Turbo
     return _generate_reference_local(flux_prompt)
 
 
@@ -520,6 +513,28 @@ def _generate_reference_dalle(prompt: str) -> str | None:
 
     except Exception as e:
         print(f"[DALL-E 3 밑그림 오류] {e}")
+        return None
+
+
+def _generate_reference_hf(prompt: str) -> str | None:
+    """HuggingFace Inference API (FLUX.1-schnell)로 참고 이미지 생성, base64 반환"""
+    try:
+        import base64
+
+        url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+        headers = {"Authorization": f"Bearer {Config.HUGGINGFACE_API_KEY}"}
+        payload = {"inputs": prompt, "parameters": {"width": 512, "height": 512}}
+        resp = requests.post(url, headers=headers, json=payload, timeout=60)
+        if resp.status_code != 200:
+            print(f"[HF 밑그림] 응답 오류: {resp.status_code} {resp.text[:200]}")
+            return None
+
+        img_str = base64.b64encode(resp.content).decode("utf-8")
+        print(f"[HF FLUX.1-schnell 밑그림] 생성 완료")
+        return f"data:image/jpeg;base64,{img_str}"
+
+    except Exception as e:
+        print(f"[HF 밑그림 오류] {e}")
         return None
 
 
@@ -556,10 +571,11 @@ def _generate_reference_local(prompt: str) -> str | None:
         if pipe is None:
             return None
 
+        # LCM 4~8 step 생성
         image = pipe(
             prompt=prompt,
-            num_inference_steps=4,
-            guidance_scale=0.0,
+            num_inference_steps=6,
+            guidance_scale=1.5,
             height=512,
             width=512,
         ).images[0]
