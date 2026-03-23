@@ -234,18 +234,16 @@ body {
 
 /* Dimensions optimized for dynamic column height and width */
 .book-cover.landscape {
-  width: auto;
+  width: 95%; /* 3-column layout width maximizer (forces uniform scale) */
   height: auto;
-  max-width: 95%; /* 3-column layout width maximizer */
-  max-height: calc(100% - 14px);
   aspect-ratio: 13 / 12;
+  margin-bottom: 10px;
 }
 .book-cover.portrait {
-  width: auto;
+  width: 85%; /* slightly narrower for portrait */
   height: auto;
-  max-width: 85%; /* slightly narrower for portrait */
-  max-height: calc(100% - 14px);
   aspect-ratio: 11 / 15;
+  margin-bottom: 10px;
 }
 
 /* Delete Button on Hover */
