@@ -454,34 +454,117 @@ def generate_reference_image(
     korean_word: str, english_word: str, image_prompt: str = None
 ) -> str | None:
     """
-    아이가 그림 그릴 때 보여줄 참고 이미지를 기존 HF 단일 API에서
-    로컬 최적화 파이프라인 생성을 사용하도록 변경합니다.
+    아이가 그림 그릴 때 보여줄 참고 이미지 생성.
+    1순위: DALL-E 3 (가장 정확, 지시 잘 따름)
+    2순위: Pollinations Flux (OPENAI 키 없을 때)
+    3순위: 로컬 SD-Turbo (인터넷 없을 때)
     Returns: base64 data URI string, or None on failure
     """
-    prompt = image_prompt or (
-        f"A cute, simple children's drawing reference of a {english_word}. "
-        f"Colorful cartoon style, friendly and approachable, clean white background, "
-        f"no text, suitable for 4 to 7 year old children. standalone object."
+    dalle_prompt = image_prompt if image_prompt else (
+        f"Children's coloring book illustration of a {english_word} ({korean_word}). "
+        f"Draw ONLY the {english_word}, nothing else. "
+        f"Style: thick bold black outline, flat bright colors, white background, "
+        f"very simple recognizable shape. "
+        f"The drawing must be immediately recognizable as a {english_word}. "
+        f"No characters, no people, no anthropomorphization, no background details. "
+        f"Simple enough for a 4-year-old child to trace and copy."
     )
 
+    flux_prompt = (
+        f"coloring book page, single {english_word}, "
+        f"simple flat illustration, thick black outline, bright colors, white background, "
+        f"recognizable {english_word} shape, no characters, no people, no background"
+    )
+    flux_negative = (
+        "character, person, human, face, anthropomorphic, complex, detailed, "
+        "photorealistic, scary, dark, multiple objects, background elements, "
+        "3d render, photograph, watercolor, painting"
+    )
+
+    # 1순위: DALL-E 3
+    if Config.OPENAI_API_KEY:
+        result = _generate_reference_dalle(dalle_prompt)
+        if result:
+            return result
+
+    # 2순위: Pollinations Flux
+    result = _generate_reference_pollinations(flux_prompt, flux_negative, english_word)
+    if result:
+        return result
+
+    # 3순위: 로컬 SD-Turbo
+    return _generate_reference_local(flux_prompt)
+
+
+def _generate_reference_dalle(prompt: str) -> str | None:
+    """DALL-E 3로 참고 이미지 생성, base64 반환"""
+    try:
+        from openai import OpenAI
+        import base64
+
+        client = OpenAI(api_key=Config.OPENAI_API_KEY)
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
+        image_url = response.data[0].url
+        img_response = requests.get(image_url, timeout=30)
+        if img_response.status_code != 200:
+            return None
+        img_str = base64.b64encode(img_response.content).decode("utf-8")
+        print(f"[DALL-E 3 밑그림] 생성 완료")
+        return f"data:image/jpeg;base64,{img_str}"
+
+    except Exception as e:
+        print(f"[DALL-E 3 밑그림 오류] {e}")
+        return None
+
+
+def _generate_reference_pollinations(positive: str, negative: str, seed_key: str) -> str | None:
+    """Pollinations.ai Flux 모델로 참고 이미지 생성, base64 반환"""
+    try:
+        encoded = urllib.parse.quote(positive)
+        neg_encoded = urllib.parse.quote(negative)
+        seed = abs(hash(seed_key)) % 100000
+        url = (
+            f"https://image.pollinations.ai/prompt/{encoded}"
+            f"?negative={neg_encoded}&width=512&height=512"
+            f"&seed={seed}&nologo=true&model=flux"
+        )
+        resp = requests.get(url, timeout=30)
+        if resp.status_code != 200:
+            print(f"[Pollinations 밑그림] 응답 오류: {resp.status_code}")
+            return None
+
+        import base64
+        img_str = base64.b64encode(resp.content).decode("utf-8")
+        print(f"[Pollinations 밑그림] 생성 완료")
+        return f"data:image/jpeg;base64,{img_str}"
+
+    except Exception as e:
+        print(f"[Pollinations 밑그림 오류] {e}")
+        return None
+
+
+def _generate_reference_local(prompt: str) -> str | None:
+    """로컬 SD-Turbo 폴백 생성"""
     try:
         pipe = _get_pipe()
         if pipe is None:
-            print("[밑그림] 파이프라인 로딩 오류")
             return None
 
-        # SD-Turbo 2 step 생성
         image = pipe(
             prompt=prompt,
-            num_inference_steps=2,
+            num_inference_steps=4,
             guidance_scale=0.0,
             height=512,
             width=512,
         ).images[0]
 
-        import io
-        import base64
-
+        import io, base64
         buffered = io.BytesIO()
         image.save(buffered, format="JPEG", quality=85)
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
