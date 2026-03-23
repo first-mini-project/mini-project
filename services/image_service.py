@@ -226,28 +226,28 @@ def _get_pipe():
             _pipe_load_failed = True
             return None
 
-        # VRAM 여유 확인 (1.5GB 이상 필요 — sd-turbo는 약 2GB)
+        # VRAM 여유 확인 (3GB 이상 필요 — LCM-DreamShaper는 약 4GB)
         free_vram = torch.cuda.mem_get_info()[0] / (1024**3)  # GB 단위
-        if free_vram < 1.5:
+        if free_vram < 3.0:
             print(
                 f"[로컬 SD] VRAM 여유 부족 ({free_vram:.1f}GB) → Pollinations.ai 폴백 모드로 전환"
             )
             _pipe_load_failed = True
             return None
 
-        from diffusers import AutoPipelineForText2Image, EulerAncestralDiscreteScheduler
+        from diffusers import DiffusionPipeline, LCMScheduler
 
-        print("[로컬 SD] SD-Turbo (FP16) 파이프라인 로딩 중...")
+        print("[로컬 SD] LCM-DreamShaper v7 (FP16) 파이프라인 로딩 중...")
 
-        # SD-Turbo 파이프라인 로드 (SDXL보다 가볍고 빠름)
-        _pipe = AutoPipelineForText2Image.from_pretrained(
-            "stabilityai/sd-turbo", torch_dtype=torch.float16, variant="fp16"
+        # LCM-DreamShaper v7 로드
+        _pipe = DiffusionPipeline.from_pretrained(
+            "SimianLuo/LCM_Dreamshaper_v7",
+            torch_dtype=torch.float16,
+            safety_checker=None,
         ).to("cuda")
 
-        # 스케줄러 설정
-        _pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(
-            _pipe.scheduler.config
-        )
+        # LCM 스케줄러 설정 (필수)
+        _pipe.scheduler = LCMScheduler.from_config(_pipe.scheduler.config)
 
         # VRAM 효율화
         try:
@@ -255,19 +255,7 @@ def _get_pipe():
         except:
             _pipe.enable_attention_slicing()
 
-        # TensorRT 기반 컴파일 적용 (선택 사항)
-        try:
-            import torch_tensorrt
-
-            print("[로컬 SD] TensorRT 엔진 컴파일 시도...")
-            _pipe.unet = torch.compile(
-                _pipe.unet, mode="reduce-overhead", backend="tensorrt"
-            )
-            print("[로컬 SD] TensorRT 컴파일 완료!")
-        except Exception as compile_err:
-            print(f"[로컬 SD] TensorRT 컴파일 생략: {compile_err}")
-
-        print("[로컬 SD] SD-Turbo 로딩 완료!")
+        print("[로컬 SD] LCM-DreamShaper v7 로딩 완료!")
 
     except Exception as e:
         print(f"[로컬 SD] 로딩 실패: {e} → Pollinations.ai 폴백 모드로 전환")
@@ -370,11 +358,11 @@ def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
     pipe = _get_pipe()
     if pipe is not None:
         try:
-            # SD-Turbo 스펙: 1~4 step
+            # LCM 스펙: 4~8 step, guidance_scale 1~2
             image = pipe(
                 prompt=positive,
-                num_inference_steps=1,
-                guidance_scale=0.0,
+                num_inference_steps=6,
+                guidance_scale=1.5,
                 height=512,
                 width=512,
             ).images[0]
@@ -472,11 +460,11 @@ def generate_reference_image(
             print("[밑그림] 파이프라인 로딩 오류")
             return None
 
-        # SD-Turbo 4 step 생성
+        # LCM 4~8 step 생성
         image = pipe(
             prompt=prompt,
-            num_inference_steps=4,
-            guidance_scale=0.5,
+            num_inference_steps=6,
+            guidance_scale=1.5,
             height=512,
             width=512,
         ).images[0]
