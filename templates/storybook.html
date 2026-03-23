@@ -635,9 +635,16 @@ block nav_title %}{{ story.title }}{% endblock %} {% block content %}
           <button class="page-btn disabled" id="prev-btn" disabled>
             ◀ 이전
           </button>
-          <span class="page-indicator">
-            <span id="current-page">1</span> / <span id="total-pages">?</span>
-          </span>
+          <div style="display:flex;align-items:center;gap:10px;">
+            {% if story.audio_path %}
+            <button class="tts-play-btn" id="tts-play-btn" title="동화 읽어주기">
+              <span id="tts-play-icon">▶</span>
+            </button>
+            {% endif %}
+            <span class="page-indicator">
+              <span id="current-page">1</span> / <span id="total-pages">?</span>
+            </span>
+          </div>
           <button class="page-btn" id="next-btn">다음 ▶</button>
         </div>
       </div>

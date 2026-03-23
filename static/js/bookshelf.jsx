@@ -459,6 +459,8 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [hasReachedEnd, setHasReachedEnd] = useState(false);
   const [nukkiMap, setNukkiMap] = useState({}); // drawing_id → nukkiUrl
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = React.useRef(null);
 
   // 누끼 처리 — 컴포넌트 마운트 시 한 번만
   useEffect(() => {
@@ -472,7 +474,7 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
         try {
           const url = makeNukkiDataURL(img);
           setNukkiMap((prev) => ({ ...prev, [d.id]: url }));
-        } catch (e) {}
+        } catch (e) { }
       };
       img.src = "/" + d.file_path.replace(/^\/+/, "");
     });
@@ -497,11 +499,27 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
   };
 
   const handleClose = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     setIsOpen(false);
     setTimeout(() => {
       if (hasReachedEnd && !book.isRead) onReadComplete(book.id);
       onClose();
     }, 350);
+  };
+
+  const handleTtsToggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      audio.play();
+      setIsPlaying(true);
+    } else {
+      audio.pause();
+      setIsPlaying(false);
+    }
   };
 
   const currentPage = book.pages[currentPageIndex] || {};
@@ -940,6 +958,15 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
               </motion.div>
             </AnimatePresence>
 
+            {book.audioPath && (
+              <audio
+                ref={audioRef}
+                src={`/static/${book.audioPath.replace(/^.*?static\//, "")}`}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+              />
+            )}
             <div className="paging-controls">
               <button
                 className={`page-btn ${currentPageIndex === 0 ? "disabled" : ""}`}
@@ -948,9 +975,20 @@ function StoryModal({ book, idx, onClose, onReadComplete }) {
               >
                 ◀ 이전
               </button>
-              <span className="page-indicator">
-                {currentPageIndex + 1} / {book.pages.length}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {book.audioPath && (
+                  <button
+                    className="tts-play-btn"
+                    onClick={handleTtsToggle}
+                    title="동화 읽어주기"
+                  >
+                    <span>{isPlaying ? "⏸" : "▶"}</span>
+                  </button>
+                )}
+                <span className="page-indicator">
+                  {currentPageIndex + 1} / {book.pages.length}
+                </span>
+              </div>
               <button
                 className={`page-btn ${currentPageIndex === book.pages.length - 1 ? "disabled" : ""}`}
                 onClick={handleNext}
@@ -1245,7 +1283,7 @@ function BookshelfApp() {
             typeof s.scene_data === "string"
               ? JSON.parse(s.scene_data)
               : s.scene_data || [];
-        } catch (e) {}
+        } catch (e) { }
 
         let parsedLayout = null;
         try {
@@ -1253,7 +1291,7 @@ function BookshelfApp() {
             typeof s.layout_data === "string"
               ? JSON.parse(s.layout_data)
               : s.layout_data || null;
-        } catch (e) {}
+        } catch (e) { }
 
         const mappedPages = [];
         if (parsedLayout && parsedLayout.spreads) {
@@ -1312,6 +1350,7 @@ function BookshelfApp() {
           isRead: Boolean(s.is_read || s.isRead),
           pages: mappedPages,
           drawings: s.drawings || [],
+          audioPath: s.audio_path || null,
         };
       });
       setBooks(mappedStories);
@@ -1376,7 +1415,7 @@ function BookshelfApp() {
               marginBottom: "10px",
             }}
           >
-            새로운 이야기를 그려볼까요?
+            새로운 그림과 다른 이야기를 만들어볼까요?
           </p>
           <div className="keyword-tags">
             {recommendedWords.map((w) => (
@@ -1484,9 +1523,9 @@ function BookshelfApp() {
         const nextAt = info.nextAt || prevAt + 10;
         const progress = info.next
           ? Math.min(
-              100,
-              Math.round(((totalRead - prevAt) / (nextAt - prevAt)) * 100),
-            )
+            100,
+            Math.round(((totalRead - prevAt) / (nextAt - prevAt)) * 100),
+          )
           : 100;
         return (
           <motion.div

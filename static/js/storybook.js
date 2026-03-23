@@ -681,12 +681,6 @@
     function makeCoverRightHTML() {
       return `<div style="display:flex;flex-direction:column;gap:14px;width:100%;">
         <h1 class="book-main-title">${SD.title}</h1>
-        <div class="tts-row">
-          <button class="tts-play-btn" id="tts-play-btn">
-            <span id="tts-play-icon">▶</span>
-          </button>
-          <span style="font-size:0.9rem;color:#666;">🔊 동화 읽어주기</span>
-        </div>
         <div class="keywords-row">
           ${keywords.map((k) => `<span class="keyword-tag">${k}</span>`).join("")}
         </div>

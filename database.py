@@ -53,7 +53,7 @@ WORDS_SEED = [
     {"korean": "우주선", "english": "spaceship", "emoji": "🚀", "category": "사물"},
     {"korean": "외계인", "english": "alien", "emoji": "👽", "category": "사물"},
     {"korean": "안경", "english": "glasses", "emoji": "👓", "category": "사물"},
-    {"korean": "모자", "english": "hat", "emoji": "🧢", "category": "사물"},
+    {"korean": "모자", "english": "hat", "emoji": "🎩", "category": "사물"},
     # 음식
     {"korean": "사과", "english": "apple", "emoji": "🍎", "category": "음식"},
     {"korean": "딸기", "english": "strawberry", "emoji": "🍓", "category": "음식"},
