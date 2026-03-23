@@ -2,9 +2,12 @@
 nav_title %}무엇을 할까요?{% endblock %} {% block content %}
 <style>
   .main-page {
-    height: calc(100vh - 62px);
-    overflow: hidden;
-    min-height: unset;
+    min-height: calc(100vh - 62px);
+    height: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 100px; /* 고정 선반(80px)을 가리지 않도록 하단 여백 추가 */
+    box-sizing: border-box;
   }
 
   .m-balloon {
