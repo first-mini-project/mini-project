@@ -97,7 +97,7 @@ function getVectorStyle(id) {
     },
   ];
   const s = styles[id % styles.length];
-  const isLandscape = id % 3 !== 0; // More landscape books
+  const isLandscape = true; // All books unified to the same size
   return { ...s, isLandscape };
 }
 

@@ -189,13 +189,13 @@ body {
 }
 .tier-3 {
   top: calc(200% / 3);
-  border-bottom: none;
+  border-bottom: 10px solid #d68b39;
 }
 
 /* Responsive Grid for perfectly seated books */
 .books-container {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(
     3,
     1fr
@@ -232,14 +232,20 @@ body {
   z-index: 50 !important; /* Pop over adjacent books! */
 }
 
-/* Dimensions optimized for 70-80% column height */
+/* Dimensions optimized for dynamic column height and width */
 .book-cover.landscape {
-  width: 130px;
-  height: 120px;
+  width: auto;
+  height: auto;
+  max-width: 95%; /* 3-column layout width maximizer */
+  max-height: calc(100% - 14px);
+  aspect-ratio: 13 / 12;
 }
 .book-cover.portrait {
-  width: 110px;
-  height: 150px;
+  width: auto;
+  height: auto;
+  max-width: 85%; /* slightly narrower for portrait */
+  max-height: calc(100% - 14px);
+  aspect-ratio: 11 / 15;
 }
 
 /* Delete Button on Hover */
@@ -498,18 +504,18 @@ body {
 .storage-section {
   display: flex;
   justify-content: space-between;
-  padding: 20px 25px;
+  padding: clamp(10px, 1.5vh, 20px) 25px;
   background: #e29e4a;
   border-bottom-left-radius: 10px;
   border-bottom-right-radius: 10px;
-  border-bottom: 25px solid #bd762e; /* The feet/base */
+  border-bottom: clamp(15px, 2vh, 25px) solid #bd762e; /* The feet/base */
 }
 
 .storage-cubby {
   flex: 1;
   margin: 0 10px;
   background: #c28336; /* Darker back inside the cubby */
-  height: 140px;
+  height: clamp(55px, 10vh, 140px);
   border-radius: 4px;
   display: flex;
   align-items: flex-end;
@@ -939,6 +945,7 @@ body {
 }
 
 .archive-treasure-box {
+  position: relative;
   background: #fdfdfd;
   border: 4px solid #8cc541;
   border-radius: 15px;
@@ -1039,19 +1046,11 @@ body {
 
   /* 책장 내부 그리드와 책들의 크기 축소 */
   .books-container {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 0 4px;
     padding: 0 10px;
   }
-
-  .book-cover.landscape {
-    width: 95px;
-    height: 85px;
-  }
-  .book-cover.portrait {
-    width: 80px;
-    height: 110px;
-  }
+  /* Books auto-scale to their 1/3 slot width */
 
   .shelf-title {
     font-size: 1.2rem;
@@ -1106,19 +1105,11 @@ body {
   }
 
   .books-container {
-    grid-template-columns: repeat(auto-fill, minmax(55px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 0 3px;
     padding: 0 5px;
   }
-
-  .book-cover.landscape {
-    width: 65px;
-    height: 60px;
-  }
-  .book-cover.portrait {
-    width: 55px;
-    height: 75px;
-  }
+  /* Books auto-scale to their 1/3 slot width */
   
   .shelf-title {
     font-size: 1rem;
