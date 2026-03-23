@@ -459,9 +459,11 @@ def generate_reference_image(
     Returns: base64 data URI string, or None on failure
     """
     prompt = image_prompt or (
-        f"A cute, simple children's drawing reference of a {english_word}. "
-        f"Colorful cartoon style, friendly and approachable, clean white background, "
-        f"no text, suitable for 4 to 7 year old children. standalone object."
+        f"single {english_word}, simple outline drawing, "
+        f"thick black border, flat solid color fill, basic shape, "
+        f"isolated on pure white background, nothing else, "
+        f"no face, no expression, no extra objects, no background pattern, "
+        f"children coloring book page, one object only"
     )
 
     try:
@@ -470,11 +472,11 @@ def generate_reference_image(
             print("[밑그림] 파이프라인 로딩 오류")
             return None
 
-        # SD-Turbo 2 step 생성
+        # SD-Turbo 4 step 생성
         image = pipe(
             prompt=prompt,
-            num_inference_steps=2,
-            guidance_scale=0.0,
+            num_inference_steps=4,
+            guidance_scale=0.5,
             height=512,
             width=512,
         ).images[0]
