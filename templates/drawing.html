@@ -1,6 +1,212 @@
 {% extends "base.html" %} {% block title %}그림 그리기 - {{ word.korean }}{%
 endblock %} {% block nav_title %}그림 그리기 🎨{% endblock %} {% block content
 %}
+<style>
+  .draw-side {
+    position: fixed;
+    top: 62px;
+    bottom: 0;
+    width: calc((100vw - 980px) / 2);
+    z-index: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-around;
+    padding: 20px 0;
+  }
+  .draw-side.left {
+    left: 0;
+  }
+  .draw-side.right {
+    right: 0;
+  }
+  .draw-side-item {
+    font-size: 2.2rem;
+    line-height: 1;
+    animation: side-float ease-in-out infinite;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.12));
+  }
+  @keyframes side-float {
+    0%,
+    100% {
+      transform: translateY(0) rotate(var(--r0, -5deg));
+    }
+    50% {
+      transform: translateY(-18px) rotate(var(--r1, 5deg));
+    }
+  }
+  .draw-block-col {
+    position: fixed;
+    bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 4px;
+    padding-bottom: 6px;
+  }
+  .draw-block-col.left {
+    left: 6px;
+  }
+  .draw-block-col.right {
+    right: 6px;
+  }
+  .db {
+    border-radius: 8px;
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    box-shadow:
+      0 4px 0 rgba(0, 0, 0, 0.15),
+      inset 0 2px 0 rgba(255, 255, 255, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Jua", sans-serif;
+    color: white;
+    font-size: 1.1rem;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
+    width: 52px;
+    height: 48px;
+  }
+</style>
+
+<div class="draw-block-col left">
+  <div class="db" style="background: #ff6b6b">A</div>
+  <div class="db" style="background: #ffd93d; color: #884400">B</div>
+  <div class="db" style="background: #6bcb77">C</div>
+  <div class="db" style="background: #4ecdc4">D</div>
+  <div class="db" style="background: #c77dff">E</div>
+</div>
+<div class="draw-block-col right">
+  <div class="db" style="background: #ff9a3c">1</div>
+  <div class="db" style="background: #ff6b9d">2</div>
+  <div class="db" style="background: #4ecdc4">3</div>
+  <div class="db" style="background: #6bcb77">4</div>
+  <div class="db" style="background: #ffd93d; color: #884400">5</div>
+</div>
+
+<div class="draw-side left">
+  <div
+    class="draw-side-item"
+    style="--r0: -10deg; --r1: 10deg; animation-duration: 5s"
+  >
+    ✏️
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: 8deg;
+      --r1: -8deg;
+      animation-duration: 4.5s;
+      animation-delay: 0.8s;
+    "
+  >
+    🖍️
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: -8deg;
+      --r1: 12deg;
+      animation-duration: 6s;
+      animation-delay: 1.6s;
+    "
+  >
+    🖌️
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: 10deg;
+      --r1: -10deg;
+      animation-duration: 5.5s;
+      animation-delay: 0.4s;
+    "
+  >
+    🎨
+  </div>
+  <div
+    class="draw-side-item"
+    style="--r0: -5deg; --r1: 8deg; animation-duration: 4s; animation-delay: 2s"
+  >
+    ✨
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: 8deg;
+      --r1: -5deg;
+      animation-duration: 5s;
+      animation-delay: 1.2s;
+    "
+  >
+    ⭐
+  </div>
+</div>
+<div class="draw-side right">
+  <div
+    class="draw-side-item"
+    style="
+      --r0: 10deg;
+      --r1: -10deg;
+      animation-duration: 5.5s;
+      animation-delay: 0.3s;
+    "
+  >
+    ⭐
+  </div>
+  <div
+    class="draw-side-item"
+    style="--r0: -8deg; --r1: 8deg; animation-duration: 4s; animation-delay: 1s"
+  >
+    💫
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: 12deg;
+      --r1: -8deg;
+      animation-duration: 5s;
+      animation-delay: 2s;
+    "
+  >
+    🌟
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: -10deg;
+      --r1: 10deg;
+      animation-duration: 6s;
+      animation-delay: 0.6s;
+    "
+  >
+    🎀
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: 8deg;
+      --r1: -12deg;
+      animation-duration: 4.5s;
+      animation-delay: 1.8s;
+    "
+  >
+    ✨
+  </div>
+  <div
+    class="draw-side-item"
+    style="
+      --r0: -5deg;
+      --r1: 8deg;
+      animation-duration: 5.5s;
+      animation-delay: 0.9s;
+    "
+  >
+    🌈
+  </div>
+</div>
 <div class="container drawing-page">
   <!-- ── 상단 헤더: 단어 제시 | 예시 그림 | 도와주세요 ── -->
   <div class="drawing-header fade-in">

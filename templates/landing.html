@@ -8,63 +8,407 @@
       rel="stylesheet"
       href="{{ url_for('static', filename='css/style.css') }}"
     />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Gaegu:wght@700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-      /* 별 파티클 */
-      .stars {
+      .m-balloon {
         position: fixed;
-        inset: 0;
+        z-index: 1;
         pointer-events: none;
-        overflow: hidden;
-        z-index: 0;
+        animation: m-bfloat ease-in-out infinite;
       }
-      .star {
-        position: absolute;
-        font-size: 1.2rem;
-        animation: twinkle var(--dur) ease-in-out infinite;
-        animation-delay: var(--delay);
-        opacity: 0;
-      }
-      @keyframes twinkle {
+      @keyframes m-bfloat {
         0%,
         100% {
-          opacity: 0;
-          transform: scale(0.5);
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-24px);
+        }
+      }
+      .m-balloon-body {
+        width: var(--bw);
+        height: calc(var(--bw) * 1.22);
+        border-radius: 50% 50% 45% 45%;
+        background: var(--bc);
+        box-shadow:
+          inset -5px -3px 0 rgba(0, 0, 0, 0.12),
+          inset 4px 4px 0 rgba(255, 255, 255, 0.35);
+        position: relative;
+      }
+      .m-balloon-body::after {
+        content: "";
+        position: absolute;
+        bottom: -14px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 2px;
+        height: 14px;
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .m-balloon-body::before {
+        content: "";
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 8px;
+        height: 5px;
+        background: var(--bc);
+        clip-path: polygon(50% 100%, 0 0, 100% 0);
+      }
+
+      .m-deco {
+        position: fixed;
+        z-index: 1;
+        pointer-events: none;
+        animation: m-dfloat ease-in-out infinite;
+        line-height: 1;
+      }
+      @keyframes m-dfloat {
+        0%,
+        100% {
+          transform: translateY(0) rotate(var(--r0));
+        }
+        50% {
+          transform: translateY(var(--dy)) rotate(var(--r1));
+        }
+      }
+
+      .m-sparkle {
+        position: fixed;
+        z-index: 1;
+        pointer-events: none;
+        animation: m-spark ease-in-out infinite;
+      }
+      @keyframes m-spark {
+        0%,
+        100% {
+          opacity: 0.2;
+          transform: scale(0.8) rotate(0deg);
         }
         50% {
           opacity: 1;
-          transform: scale(1.2);
+          transform: scale(1.3) rotate(20deg);
+        }
+      }
+
+      .m-tower {
+        position: fixed;
+        bottom: 80px;
+        z-index: 2;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column-reverse;
+        align-items: center;
+        gap: 5px;
+        padding-bottom: 5px;
+      }
+      .m-b {
+        border-radius: 10px;
+        border: 3px solid rgba(0, 0, 0, 0.1);
+        box-shadow:
+          0 4px 0 rgba(0, 0, 0, 0.15),
+          inset 0 2px 0 rgba(255, 255, 255, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Jua", sans-serif;
+        color: white;
+        font-size: 1.3rem;
+        text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.2);
+      }
+
+      .m-shelf {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 2;
+        pointer-events: none;
+        height: 80px;
+        background: linear-gradient(180deg, #c8844a 0%, #a8622a 100%);
+        border-top: 7px solid #e09a60;
+        box-shadow: 0 -4px 0 #7a4010;
+      }
+      .m-shelf-toys {
+        position: absolute;
+        bottom: 10px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-end;
+        font-size: 2.4rem;
+        padding: 0 100px;
+      }
+      .m-shelf-toys span {
+        animation: m-bob ease-in-out infinite;
+        filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+      }
+      @keyframes m-bob {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-7px);
         }
       }
     </style>
   </head>
   <body>
-    <div class="stars" id="stars"></div>
+    <div class="m-shelf">
+      <div class="m-shelf-toys">
+        <span style="animation-delay: 0s; animation-duration: 2s">🧸</span>
+        <span style="animation-delay: 0.4s; animation-duration: 2.2s">🚂</span>
+        <span style="animation-delay: 0.8s; animation-duration: 1.8s">🎎</span>
+        <span style="animation-delay: 1.2s; animation-duration: 2.4s">🎠</span>
+        <span style="animation-delay: 0.2s; animation-duration: 2s">🧩</span>
+        <span style="animation-delay: 0.6s; animation-duration: 2.2s">🎁</span>
+      </div>
+    </div>
+
+    <div class="m-tower" style="left: 12px">
+      <div class="m-b" style="width: 74px; height: 60px; background: #ff6b6b">
+        A
+      </div>
+      <div
+        class="m-b"
+        style="width: 66px; height: 60px; background: #ffd93d; color: #884400"
+      >
+        B
+      </div>
+      <div class="m-b" style="width: 70px; height: 60px; background: #6bcb77">
+        C
+      </div>
+      <div class="m-b" style="width: 62px; height: 60px; background: #4ecdc4">
+        D
+      </div>
+    </div>
+
+    <div class="m-tower" style="right: 12px">
+      <div class="m-b" style="width: 74px; height: 60px; background: #c77dff">
+        1
+      </div>
+      <div class="m-b" style="width: 66px; height: 60px; background: #ff9a3c">
+        2
+      </div>
+      <div class="m-b" style="width: 70px; height: 60px; background: #ff6b9d">
+        3
+      </div>
+      <div class="m-b" style="width: 62px; height: 60px; background: #4ecdc4">
+        4
+      </div>
+    </div>
+
+    <div
+      class="m-balloon"
+      style="
+        top: 5%;
+        left: 8%;
+        animation-duration: 5s;
+        --bw: 48px;
+        --bc: #ff6b6b;
+      "
+    >
+      <div class="m-balloon-body"></div>
+    </div>
+    <div
+      class="m-balloon"
+      style="
+        top: 3%;
+        left: 22%;
+        animation-duration: 6.5s;
+        animation-delay: 1s;
+        --bw: 40px;
+        --bc: #ffd93d;
+      "
+    >
+      <div class="m-balloon-body"></div>
+    </div>
+    <div
+      class="m-balloon"
+      style="
+        top: 6%;
+        left: 78%;
+        animation-duration: 5.5s;
+        animation-delay: 2s;
+        --bw: 44px;
+        --bc: #6bcb77;
+      "
+    >
+      <div class="m-balloon-body"></div>
+    </div>
+    <div
+      class="m-balloon"
+      style="
+        top: 2%;
+        left: 64%;
+        animation-duration: 7s;
+        animation-delay: 0.5s;
+        --bw: 38px;
+        --bc: #4ecdc4;
+      "
+    >
+      <div class="m-balloon-body"></div>
+    </div>
+    <div
+      class="m-balloon"
+      style="
+        top: 4%;
+        left: 90%;
+        animation-duration: 5s;
+        animation-delay: 1.5s;
+        --bw: 42px;
+        --bc: #c77dff;
+      "
+    >
+      <div class="m-balloon-body"></div>
+    </div>
+
+    <div
+      class="m-deco"
+      style="
+        top: 12%;
+        left: 4%;
+        font-size: 2.4rem;
+        --r0: -8deg;
+        --r1: 8deg;
+        --dy: -20px;
+        animation-duration: 5s;
+      "
+    >
+      🎨
+    </div>
+    <div
+      class="m-deco"
+      style="
+        top: 20%;
+        left: 91%;
+        font-size: 2rem;
+        --r0: 5deg;
+        --r1: -10deg;
+        --dy: -18px;
+        animation-duration: 4.5s;
+        animation-delay: 1s;
+      "
+    >
+      🎯
+    </div>
+    <div
+      class="m-deco"
+      style="
+        top: 45%;
+        left: 3%;
+        font-size: 2.2rem;
+        --r0: -12deg;
+        --r1: 6deg;
+        --dy: -22px;
+        animation-duration: 6s;
+        animation-delay: 2s;
+      "
+    >
+      🎪
+    </div>
+    <div
+      class="m-deco"
+      style="
+        top: 40%;
+        left: 92%;
+        font-size: 2rem;
+        --r0: 8deg;
+        --r1: -8deg;
+        --dy: -18px;
+        animation-duration: 5.5s;
+        animation-delay: 0.5s;
+      "
+    >
+      ⭐
+    </div>
+    <div
+      class="m-deco"
+      style="
+        top: 65%;
+        left: 5%;
+        font-size: 1.8rem;
+        --r0: -5deg;
+        --r1: 10deg;
+        --dy: -16px;
+        animation-duration: 4s;
+        animation-delay: 3s;
+      "
+    >
+      🌈
+    </div>
+    <div
+      class="m-deco"
+      style="
+        top: 62%;
+        left: 89%;
+        font-size: 1.8rem;
+        --r0: 10deg;
+        --r1: -5deg;
+        --dy: -14px;
+        animation-duration: 5s;
+        animation-delay: 1.5s;
+      "
+    >
+      🎀
+    </div>
+
+    <div
+      class="m-sparkle"
+      style="top: 28%; left: 18%; animation-duration: 2.5s; font-size: 1.5rem"
+    >
+      ✨
+    </div>
+    <div
+      class="m-sparkle"
+      style="
+        top: 35%;
+        left: 82%;
+        animation-duration: 3s;
+        animation-delay: 0.8s;
+        font-size: 1.3rem;
+      "
+    >
+      ⭐
+    </div>
+    <div
+      class="m-sparkle"
+      style="
+        top: 55%;
+        left: 25%;
+        animation-duration: 2s;
+        animation-delay: 1.5s;
+        font-size: 1.4rem;
+      "
+    >
+      ✨
+    </div>
+    <div
+      class="m-sparkle"
+      style="
+        top: 22%;
+        left: 72%;
+        animation-duration: 3.5s;
+        animation-delay: 0.3s;
+        font-size: 1.2rem;
+      "
+    >
+      💫
+    </div>
 
     <main class="landing">
-      <span class="landing-castle">🏰</span>
-
+      <span class="landing-castle">🎠</span>
       <h1 class="landing-title">우리 AI 동화 만들기</h1>
       <p class="landing-subtitle">
         나만의 그림으로 특별한 동화를 만들어봐요! ✨
       </p>
-
-      <a href="/main" class="btn btn-yellow btn-big start-btn"> ✨ START ✨ </a>
+      <a href="/main" class="btn btn-yellow btn-big start-btn">🌟 START 🌟</a>
     </main>
-
-    <script>
-      // 별 파티클 생성
-      const stars = document.getElementById("stars");
-      const emojis = ["⭐", "🌟", "✨", "💫", "🌙", "☁️", "🌈"];
-      for (let i = 0; i < 18; i++) {
-        const s = document.createElement("span");
-        s.className = "star";
-        s.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-        s.style.left = Math.random() * 100 + "%";
-        s.style.top = Math.random() * 100 + "%";
-        s.style.setProperty("--dur", 2 + Math.random() * 3 + "s");
-        s.style.setProperty("--delay", Math.random() * 3 + "s");
-        stars.appendChild(s);
-      }
-    </script>
   </body>
 </html>
