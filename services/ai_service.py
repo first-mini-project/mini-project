@@ -148,22 +148,40 @@ _INANIMATE_WORDS = {
 }
 
 
-def _kw_role(i: int, kw: str, all_keywords: list) -> str:
-    if kw in _INANIMATE_WORDS:
-        return f'  - [{i+1}] {kw}: 사물/장소 → 이야기 속 배경·소품·도구로 활용 (절대 의인화·고유명사화 금지)'
-    # 비사물 중 첫 번째 = 주인공 (i=0이 사물이어도 올바르게 지정)
-    first_alive = next((k for k in all_keywords if k not in _INANIMATE_WORDS), None)
-    label = '주인공 캐릭터' if kw == first_alive else '조연 캐릭터'
-    return f'  - [{i+1}] {kw}: {label} → 동물·사람 등 생명체로 등장'
+def _kw_role(i: int, kw: str, protagonist_kw: str = None) -> str:
+    if protagonist_kw:
+        if kw == protagonist_kw:
+            return f'  - [{i+1}] {kw}: 주인공 캐릭터 (사용자 지정) → 서사의 중심 주체로 의인화하여 등장'
+        return f'  - [{i+1}] {kw}: 조연 캐릭터 → 주인공과 상호작용하는 캐릭터로 등장'
+    # 주인공 미지정: 첫 번째 키워드가 주인공, 나머지 조연
+    label = '주인공 캐릭터' if i == 0 else '조연 캐릭터'
+    return f'  - [{i+1}] {kw}: {label}'
 
 
-def _build_prompt(keywords: list, eng_keywords: list = None) -> str:
+def _build_prompt(keywords: list, eng_keywords: list = None, protagonist_kw: str = None) -> str:
     """단어 목록으로 동화 생성 프롬프트를 만듭니다. 세계관·장르를 랜덤 선택해 다양성을 확보합니다."""
     world_name, world_desc = random.choice(_WORLDS)
     genre_name, genre_desc = random.choice(_GENRES)
 
-    role_hints = '\n'.join(_kw_role(i, kw, keywords) for i, kw in enumerate(keywords))
+    role_hints = '\n'.join(_kw_role(i, kw, protagonist_kw) for i, kw in enumerate(keywords))
     kw_list = ', '.join(keywords)
+
+    # 사용자가 주인공을 직접 지정한 경우 강조 블록 삽입
+    other_kws = [kw for kw in keywords if kw != protagonist_kw]
+    if protagonist_kw:
+        other_note = (
+            f"\nAll Keywords Required: 나머지 단어 [{', '.join(other_kws)}]도 반드시 이야기 안에 등장해야 한다."
+            f" 사물은 소품·배경 요소로, 조연 캐릭터는 이야기 속에서 **'{protagonist_kw}'**와 상호작용하는 역할로 활용하라."
+        ) if other_kws else ''
+        protagonist_block = f"""
+━━ 🌟 주인공 지정 (사용자가 선택) ━━
+Primary Protagonist: 이 동화의 유일한 주인공은 **'{protagonist_kw}'**이다.
+Narrative Anchor: 모든 이야기의 전개, 갈등 해결, 결말은 반드시 **'{protagonist_kw}'**를 중심으로 이루어져야 한다.
+Character Identity: **'{protagonist_kw}'**가 생물이든 무생물이든 관념이든 상관없이 의인화하거나 서사의 주체로 설정하여 주인공의 지위를 부여하라.
+No Sidekick Takeover: 다른 조연 캐릭터가 등장하더라도 결코 **'{protagonist_kw}'**보다 비중이 커지거나 주인공 역할을 대신해서는 안 된다.
+Cover Illustration: 표지 배경 이미지는 반드시 주인공 **'{protagonist_kw}'**가 가장 크고 명확하게 보이는 장면으로 묘사하라.{other_note}"""
+    else:
+        protagonist_block = ''
 
     # bg 필드에서 제외해야 할 영어 키워드 (아이가 그린 그림 → 배경에 나오면 안 됨)
     if eng_keywords:
@@ -184,7 +202,7 @@ def _build_prompt(keywords: list, eng_keywords: list = None) -> str:
     )
 
     return f"""당신은 4~7세 한국 어린이를 위한 창의적인 동화 작가입니다.
-
+{protagonist_block}
 ━━ 이번 이야기 설정 (반드시 따르세요) ━━
 🌍 세계관: {world_name}
    배경 분위기: {world_desc}
@@ -195,10 +213,10 @@ def _build_prompt(keywords: list, eng_keywords: list = None) -> str:
 
 ★ 핵심 규칙
 - 위 세계관과 장르를 정확히 따라야 합니다 (자의적으로 바꾸지 마세요)
-- 사물/장소 단어는 절대 의인화하거나 고유명사(캐릭터 이름)로 쓰지 마세요
-  예) '집'→주인공이 사는 집, '왕관'→주인공이 쓰는 왕관, '달'→하늘의 달
 - ⚠️ 위 단어 [{kw_list}] 은 모두 반드시 장면(text) 안에 직접 등장해야 합니다
   단어를 빠뜨리면 안 됩니다. 4개 단락에 골고루 분산하세요
+- 캐릭터에게 이름을 붙일 경우, 반드시 매 장면(text)마다 원래 단어를 최소 1회 포함하세요
+  예) "콩이 토끼는...", "토끼 콩이가..." — 이름만 단독으로 쓰면 안 됩니다
 - 단어들이 서로 만나고, 상호작용하며 이야기가 전개되어야 합니다
 
 작성 규칙:
@@ -210,14 +228,23 @@ def _build_prompt(keywords: list, eng_keywords: list = None) -> str:
 반드시 아래 JSON 형식으로만 응답 (추가 설명 없이):
 {{
   "title": "동화 제목 (10자 이내)",
+  "name_map": {{"원래단어": "캐릭터이름"}},
   "scenes": [
-    {{"text": "단락1 (2~3문장)", "bg": "{bg_rule}"}},
-    {{"text": "단락2", "bg": "{bg_rule}"}},
-    {{"text": "단락3", "bg": "{bg_rule}"}},
-    {{"text": "단락4", "bg": "{bg_rule}"}}
+    {{"text": "단락1 (2~3문장)", "bg": "{bg_rule}", "present": ["이 장면에 실제 등장하는 원래 단어 목록"]}},
+    {{"text": "단락2", "bg": "{bg_rule}", "present": []}},
+    {{"text": "단락3", "bg": "{bg_rule}", "present": []}},
+    {{"text": "단락4", "bg": "{bg_rule}", "present": []}}
   ],
   "moral": "이 이야기의 교훈: ..."
-}}"""
+}}
+⚠️ name_map과 present는 반드시 출력해야 하는 필수 필드입니다.
+※ name_map: 캐릭터에게 이름을 붙인 경우 반드시 기입. 예) {{"나무": "고목 할아버지", "토끼": "콩이"}}. 이름 없으면 빈 객체 {{}}
+※ present: 각 장면마다 반드시 작성. 해당 장면에 직접 등장해 행동·상호작용하는 경우만 포함. **장면당 최대 2개**.
+  - 원래 단어 또는 name_map의 캐릭터 이름 중 하나를 일관되게 사용 (섞어 쓰지 말 것)
+  - 유사 단어 사용 금지 (예: 왕관→왕국 금지)
+  - 3개 이상의 캐릭터가 같은 장면에 등장하지 않도록 이야기를 구성하세요
+  - 예) "고목 할아버지가 손을 흔들었어요" → present에 "고목 할아버지" 또는 "나무" 포함
+  - 예) "나무가 알려준 지도를 꺼냈어요" → present에 나무 미포함 (직접 등장 아님)"""
 
 
 def _strip_markdown(text: str) -> str:
@@ -260,23 +287,24 @@ def _parse_result(response_text: str) -> dict:
     return result
 
 
-def generate_fairy_tale(keywords: list, drawings: list = None) -> dict:
+def generate_fairy_tale(keywords: list, drawings: list = None, protagonist_kw: str = None) -> dict:
     """
     Gemini (우선) 또는 Claude를 사용하여 한국어 동화를 생성합니다.
     keywords: 한국어 단어 리스트
     drawings: 아이가 그린 그림 리스트 (image_data 포함) — Vision API로 그림 분석
+    protagonist_kw: 사용자가 선택한 주인공 키워드 (없으면 None)
     Returns: {'title': str, 'content': str, 'moral': str, 'scene_data': list}
     """
     # Gemini 우선
     if Config.GEMINI_API_KEY:
-        return _generate_with_gemini(keywords, drawings)
+        return _generate_with_gemini(keywords, drawings, protagonist_kw)
     # Claude 폴백
     if Config.ANTHROPIC_API_KEY:
-        return _generate_with_claude(keywords, drawings)
+        return _generate_with_claude(keywords, drawings, protagonist_kw)
     return _fallback_story(keywords)
 
 
-def _generate_with_gemini(keywords: list, drawings: list = None) -> dict:
+def _generate_with_gemini(keywords: list, drawings: list = None, protagonist_kw: str = None) -> dict:
     """Gemini로 동화를 생성합니다."""
     try:
         import base64
@@ -285,7 +313,7 @@ def _generate_with_gemini(keywords: list, drawings: list = None) -> dict:
 
         client = genai.Client(api_key=Config.GEMINI_API_KEY)
         eng_keywords = [d.get('english', '') for d in (drawings or []) if d.get('english')]
-        prompt  = _build_prompt(keywords, eng_keywords)
+        prompt  = _build_prompt(keywords, eng_keywords, protagonist_kw)
         parts   = []
 
         # 그림이 있으면 Vision 포함
@@ -308,7 +336,7 @@ def _generate_with_gemini(keywords: list, drawings: list = None) -> dict:
             parts.append(types.Part.from_text(text=prompt))
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash-lite',
+            model='gemini-2.5-flash',
             contents=parts,
             config=types.GenerateContentConfig(
                 temperature=0.9,
@@ -321,17 +349,17 @@ def _generate_with_gemini(keywords: list, drawings: list = None) -> dict:
         print(f"[Gemini API 오류] {e}")
         # Claude로 재시도
         if Config.ANTHROPIC_API_KEY:
-            return _generate_with_claude(keywords, drawings)
+            return _generate_with_claude(keywords, drawings, protagonist_kw)
         return _fallback_story(keywords)
 
 
-def _generate_with_claude(keywords: list, drawings: list = None) -> dict:
+def _generate_with_claude(keywords: list, drawings: list = None, protagonist_kw: str = None) -> dict:
     """Claude로 동화를 생성합니다 (폴백)."""
     try:
         import anthropic
         client    = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
         eng_keywords = [d.get('english', '') for d in (drawings or []) if d.get('english')]
-        prompt    = _build_prompt(keywords, eng_keywords)
+        prompt    = _build_prompt(keywords, eng_keywords, protagonist_kw)
         has_images = drawings and any(d.get('image_data') for d in drawings)
         content   = []
 

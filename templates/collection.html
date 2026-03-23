@@ -69,6 +69,19 @@
 </div>
 {% endif %}
 
+<!-- ── 주인공 선택 모달 ── -->
+<div class="protagonist-modal" id="protagonist-modal">
+  <div class="protagonist-box">
+    <div class="protagonist-title">⭐ 누가 주인공이에요?</div>
+    <p class="protagonist-sub">동화의 중심이 될 그림을 골라요!</p>
+    <div class="protagonist-cards" id="protagonist-cards"></div>
+    <div style="display:flex; gap:12px; justify-content:center; margin-top:18px;">
+      <button class="btn btn-yellow" id="protagonist-skip-btn">건너뛰기</button>
+      <button class="btn btn-pink" id="protagonist-confirm-btn" disabled>이 친구가 주인공! ✨</button>
+    </div>
+  </div>
+</div>
+
 <div class="loading-overlay" id="loading-overlay">
   <!-- 상단 로딩 안내 -->
   <div class="loading-info-box">

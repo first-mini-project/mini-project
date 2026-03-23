@@ -682,6 +682,83 @@ body::before {
 .empty-state .empty-icon { font-size: 5rem; margin-bottom: 16px; display: block; }
 .empty-state p { font-size: 1.1rem; margin-bottom: 20px; }
 
+/* ─── 주인공 선택 모달 ──────────────────────────────────────────────────────── */
+.protagonist-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 300;
+  align-items: center;
+  justify-content: center;
+}
+.protagonist-modal.show { display: flex; }
+.protagonist-box {
+  background: #fff;
+  border-radius: 28px;
+  padding: 32px 28px 28px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.22);
+  text-align: center;
+  animation: pop-in 0.25s ease;
+}
+@keyframes pop-in {
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+.protagonist-title {
+  font-size: 1.5rem;
+  font-family: 'Jua', sans-serif;
+  color: var(--pink);
+  margin-bottom: 6px;
+}
+.protagonist-sub {
+  font-size: 0.95rem;
+  color: #888;
+  margin-bottom: 20px;
+}
+.protagonist-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+.protagonist-card {
+  width: 100px;
+  border-radius: 16px;
+  border: 3px solid #eee;
+  padding: 10px 8px 8px;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  background: #fafafa;
+}
+.protagonist-card:hover { transform: translateY(-4px); border-color: var(--yellow); }
+.protagonist-card.chosen {
+  border-color: var(--pink);
+  background: #fff0f6;
+  box-shadow: 0 0 0 4px rgba(255,107,157,0.2);
+  transform: scale(1.06);
+}
+.protagonist-card img {
+  width: 72px; height: 72px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 6px;
+}
+.protagonist-card .p-emoji {
+  font-size: 2.2rem;
+  display: block;
+  margin: 0 auto 6px;
+  line-height: 1;
+}
+.protagonist-card .p-label {
+  font-size: 0.82rem;
+  font-family: 'Jua', sans-serif;
+  color: #444;
+}
+.protagonist-card.chosen .p-label { color: var(--pink); font-weight: bold; }
+
 /* ─── 동화 생성 로딩 ────────────────────────────────────────────────────────── */
 .loading-overlay {
   display: none;
