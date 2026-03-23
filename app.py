@@ -219,12 +219,25 @@ def api_generate_story():
     # korean 없는 그림 제외 (word 미연결 자유 낙서 등)
     drawings = [d for d in drawings if d.get('korean')]
 
+    # 주인공 그림 ID (선택 사항)
+    protagonist_id = data.get('protagonist_id')
+    protagonist_kw = None
+    if protagonist_id:
+        protagonist_id = int(protagonist_id)
+        prot_drawing = next((d for d in drawings if d['id'] == protagonist_id), None)
+        if prot_drawing:
+            protagonist_kw = prot_drawing.get('korean')
+    print(f"[주인공] protagonist_id={protagonist_id}, protagonist_kw={protagonist_kw}")
+
     # 키워드 추출 (중복 제거, 순서 유지)
-    keywords = list(dict.fromkeys([d['korean'] for d in drawings]))
+    keywords = list(dict.fromkeys(
+        [protagonist_kw] + [d['korean'] for d in drawings] if protagonist_kw
+        else [d['korean'] for d in drawings]
+    ))
 
     try:
         # 1. Gemini로 동화 생성
-        story_data = ai_service.generate_fairy_tale(keywords, drawings)
+        story_data = ai_service.generate_fairy_tale(keywords, drawings, protagonist_kw=protagonist_kw)
 
         # 2. AI 배경 이미지 생성
         # 아이가 그린 모든 그림의 키워드를 모든 배경에서 제외 (아이 그림이 메인 캐릭터)
@@ -277,12 +290,32 @@ def api_generate_story():
                 t = t.replace(bad, '▪' * len(bad))
             return keyword in t
 
+        # 캐릭터 이름 → 원래 키워드 역매핑 (AI가 이름 붙인 경우 이름으로도 검색)
+        name_map = story_data.get('name_map') or {}  # {"토끼": "콩이", ...}
+        # {캐릭터이름: drawing_id} 역방향 맵
+        char_name_to_id = {}
+        for d in drawings:
+            kw = d.get('korean', '')
+            char_name = name_map.get(kw, '')
+            if char_name:
+                char_name_to_id[char_name] = d['id']
+        if name_map:
+            print(f"[캐릭터 이름 맵] {name_map}")
+
         def find_mentioned_drawings(scene_text, all_drawings):
             text = scene_text or ''
             result = []
+            seen = set()
             for d in all_drawings:
-                if d.get('korean') and contains_word(text, d['korean']):
-                    result.append(d['id'])
+                did = d['id']
+                if did in seen:
+                    continue
+                kw = d.get('korean', '')
+                char_name = name_map.get(kw, '')
+                # 원래 키워드 또는 캐릭터 이름 중 하나라도 등장하면 매칭
+                if (kw and contains_word(text, kw)) or (char_name and char_name in text):
+                    result.append(did)
+                    seen.add(did)
             return result
         
         layout_spreads = []
@@ -303,21 +336,34 @@ def api_generate_story():
             'sceneIdx': 0
         })
 
+        # 키워드 → drawing id 맵
+        kw_to_id = {d['korean']: d['id'] for d in drawings}
+
         # 동화 내용 스프레드 (빈 장면 스킵)
         for i in range(num_content):
             scene = scenes[i] if scenes and i < len(scenes) else None
             if not scene or not (scene.get('text') or '').strip():
                 continue  # 텍스트 없는 장면은 페이지 생성 안 함
-            mentioned_ids = []
-            if scene.get('text'):
-                mentioned_ids = find_mentioned_drawings(scene['text'], drawings)
+
+            # AI가 반환한 present 리스트 우선 사용, 없으면 텍스트 매칭 폴백
+            present_kws = scene.get('present') or []
+            if present_kws:
+                mentioned_ids = []
+                seen_ids = set()
+                for kw in present_kws:
+                    did = kw_to_id.get(kw) or char_name_to_id.get(kw)  # 원래 단어 또는 캐릭터 이름 모두 허용
+                    if did and did not in seen_ids:
+                        mentioned_ids.append(did)
+                        seen_ids.add(did)
+            else:
+                mentioned_ids = find_mentioned_drawings(scene.get('text', ''), drawings)
 
             primary_id = mentioned_ids[0] if len(mentioned_ids) > 0 else None
             secondary_id = mentioned_ids[1] if len(mentioned_ids) > 1 else None
 
             print(f"[장면 {i+1}] 텍스트: {(scene.get('text') or '')[:40]}...")
-            print(f"         언급된 그림: {[id_to_kw.get(mid, mid) for mid in mentioned_ids]}")
-            print(f"         → primary={id_to_kw.get(primary_id, None)}, secondary={id_to_kw.get(secondary_id, None)}")
+            print(f"         present={present_kws} → {[id_to_kw.get(mid) for mid in mentioned_ids]}")
+            print(f"         → primary={id_to_kw.get(primary_id)}, secondary={id_to_kw.get(secondary_id)}")
 
             layout_spreads.append({
                 'type': 'content',
@@ -328,34 +374,6 @@ def api_generate_story():
                 'textPageNum': i + 1
             })
 
-        # 미배치 그림 후처리: 텍스트에 언급 안 된 그림을 빈 슬롯에 채움
-        assigned_ids = set()
-        for sp in layout_spreads:
-            if sp.get('primaryDrawingId'):
-                assigned_ids.add(sp['primaryDrawingId'])
-            if sp.get('secondaryDrawingId'):
-                assigned_ids.add(sp['secondaryDrawingId'])
-
-        unassigned = [d for d in drawings if d['id'] not in assigned_ids]
-        if unassigned:
-            print(f"[미배치 그림] {[d['korean'] for d in unassigned]} → 빈 슬롯에 강제 배치")
-        for d in unassigned:
-            placed = False
-            for sp in layout_spreads:
-                if sp.get('type') == 'content' and not sp.get('primaryDrawingId'):
-                    sp['primaryDrawingId'] = d['id']
-                    placed = True
-                    print(f"  → '{d['korean']}' 장면{sp['sceneIdx']+1} primary 슬롯에 배치")
-                    break
-            if placed:
-                continue
-            for sp in layout_spreads:
-                if (sp.get('type') == 'content'
-                        and not sp.get('secondaryDrawingId')
-                        and sp.get('primaryDrawingId') != d['id']):  # 같은 그림 중복 방지
-                    sp['secondaryDrawingId'] = d['id']
-                    print(f"  → '{d['korean']}' 장면{sp['sceneIdx']+1} secondary 슬롯에 배치")
-                    break
         print(f"{'='*50}\n")
 
         # 교훈 페이지 (콜라주 이미지 포함)

@@ -400,44 +400,115 @@
   setMode(window.innerWidth <= 768 ? 'grid' : 'float');
 
 
-  // ─── 동화 만들기 버튼 ──────────────────────────────────────────
+  // ─── 주인공 선택 모달 ──────────────────────────────────────────
+  let protagonistId = null;
+  const protagonistModal   = document.getElementById('protagonist-modal');
+  const protagonistCards   = document.getElementById('protagonist-cards');
+  const confirmBtn         = document.getElementById('protagonist-confirm-btn');
+  const skipBtn            = document.getElementById('protagonist-skip-btn');
+
+  function openProtagonistModal(drawingIds) {
+    protagonistId = null;
+    protagonistCards.innerHTML = '';
+
+    // 선택된 그림 카드 렌더링 (origCards 기준)
+    drawingIds.forEach(id => {
+      const src = origCards.find(c => c.dataset.id === String(id));
+      if (!src) return;
+      const img  = src.querySelector('img');
+      const emoji = src.querySelector('.drawing-card-emoji');
+      const label = src.querySelector('.drawing-card-word');
+
+      const card = document.createElement('div');
+      card.className = 'protagonist-card';
+      card.dataset.id = id;
+
+      if (img && img.src) {
+        const i = document.createElement('img');
+        i.src = img.src;
+        i.onerror = () => { i.remove(); const e = document.createElement('span'); e.className='p-emoji'; e.textContent = emoji ? emoji.textContent.trim() : '🎨'; card.prepend(e); };
+        card.appendChild(i);
+      } else {
+        const e = document.createElement('span');
+        e.className = 'p-emoji';
+        e.textContent = emoji ? emoji.textContent.trim() : '🎨';
+        card.appendChild(e);
+      }
+      const lbl = document.createElement('div');
+      lbl.className = 'p-label';
+      lbl.textContent = label ? label.textContent.replace(/[^\uAC00-\uD7A3a-zA-Z0-9 ]/g,'').trim() : '';
+      card.appendChild(lbl);
+
+      card.addEventListener('click', () => {
+        protagonistCards.querySelectorAll('.protagonist-card').forEach(c => c.classList.remove('chosen'));
+        card.classList.add('chosen');
+        protagonistId = Number(id);
+        confirmBtn.disabled = false;
+      });
+      protagonistCards.appendChild(card);
+    });
+
+    confirmBtn.disabled = true;
+    protagonistModal.classList.add('show');
+  }
+
+  function closeProtagonistModal() {
+    protagonistModal.classList.remove('show');
+  }
+
+  if (skipBtn)    skipBtn.addEventListener('click',   () => { closeProtagonistModal(); startGenerate(null); });
+  if (confirmBtn) confirmBtn.addEventListener('click', () => { closeProtagonistModal(); startGenerate(protagonistId); });
+
+  async function startGenerate(protagonistDrawingId) {
+    const drawingIds = Array.from(selected).map(Number);
+    loading.classList.add('show');
+    if (makeBtn) makeBtn.disabled = true;
+
+    const messages = ['동화를 만들고 있어요... ✨','AI가 이야기를 쓰고 있어요... 📖','예쁜 이야기가 완성되고 있어요... 🎨','거의 다 됐어요! 🌟'];
+    let msgIdx = 0;
+    const loadingText = document.getElementById('loading-text');
+    const msgInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % messages.length;
+      if (loadingText) loadingText.textContent = messages[msgIdx];
+    }, 2500);
+
+    try {
+      const body = { drawing_ids: drawingIds };
+      if (protagonistDrawingId) body.protagonist_id = protagonistDrawingId;
+      const res  = await fetch('/api/story/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      clearInterval(msgInterval);
+      if (data.success) {
+        if (data.level_up_info) {
+          showLevelUpModal(data.level_up_info);
+          setTimeout(() => { window.location.href = `/story/${data.story_id}`; }, 4000);
+        } else {
+          window.location.href = `/story/${data.story_id}`;
+        }
+      } else {
+        loading.classList.remove('show');
+        if (makeBtn) makeBtn.disabled = false;
+        alert('오류: ' + data.error);
+      }
+    } catch {
+      clearInterval(msgInterval);
+      loading.classList.remove('show');
+      if (makeBtn) makeBtn.disabled = false;
+      alert('동화 만들기 중 오류가 발생했어요.');
+    }
+  }
+
   if (makeBtn) {
-    makeBtn.addEventListener('click', async () => {
+    makeBtn.addEventListener('click', () => {
       if (selected.size < MIN) return;
       const drawingIds = Array.from(selected).map(Number);
-      loading.classList.add('show');
-      makeBtn.disabled = true;
-
-      const messages = ['동화를 만들고 있어요... ✨','AI가 이야기를 쓰고 있어요... 📖','예쁜 이야기가 완성되고 있어요... 🎨','거의 다 됐어요! 🌟'];
-      let msgIdx = 0;
-      const loadingText = document.getElementById('loading-text');
-      const msgInterval = setInterval(() => {
-        msgIdx = (msgIdx + 1) % messages.length;
-        if (loadingText) loadingText.textContent = messages[msgIdx];
-      }, 2500);
-
-      try {
-        const res  = await fetch('/api/story/generate', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ drawing_ids: drawingIds }),
-        });
-        const data = await res.json();
-        clearInterval(msgInterval);
-        if (data.success) { 
-          if (data.level_up_info) {
-            showLevelUpModal(data.level_up_info);
-            setTimeout(() => {
-              window.location.href = `/story/${data.story_id}`;
-            }, 4000);
-          } else {
-            window.location.href = `/story/${data.story_id}`;
-          }
-        }
-        else { loading.classList.remove('show'); makeBtn.disabled = false; alert('오류: ' + data.error); }
-      } catch {
-        clearInterval(msgInterval);
-        loading.classList.remove('show'); makeBtn.disabled = false;
-        alert('동화 만들기 중 오류가 발생했어요.');
+      if (drawingIds.length >= 2) {
+        openProtagonistModal(drawingIds);
+      } else {
+        startGenerate(drawingIds[0]);
       }
     });
   }

@@ -277,18 +277,6 @@
       return { primary: null, secondary: null };
     });
 
-    // 미배치 그림 후처리: 텍스트에 안 나온 그림을 빈 슬롯에 채움
-    const assigned = new Set();
-    result.forEach(r => {
-      if (r.primary)   assigned.add(r.primary.id);
-      if (r.secondary) assigned.add(r.secondary.id);
-    });
-    for (const d of allDrawings.filter(d => !assigned.has(d.id))) {
-      let placed = false;
-      for (const r of result) { if (!r.primary)   { r.primary   = d; placed = true; break; } }
-      if (!placed)
-        for (const r of result) { if (!r.secondary && (!r.primary || r.primary.id !== d.id)) { r.secondary = d; break; } }
-    }
     return result;
   }
 
@@ -322,7 +310,7 @@
 
   function skyStageHTML(d, posClass, scale = 1.0) {
     // sky-right(구석)는 조금 작게, 중앙 sky는 더 크게
-    const baseH = (posClass === 'sky-right' || posClass === 'sky-right dream') ? 26 : 30;
+    const baseH = (posClass === 'sky-right' || posClass === 'sky-right dream') ? 32 : 30;
     const h = (baseH * scale).toFixed(1);
     const sizeStyle = `style="max-height:${h}vh"`;
     return `<div class="drawing-stage ${posClass || 'sky'}">
@@ -467,37 +455,7 @@
       </div>`;
     }
 
-    function makeMoralLeftHTML(spec) {
-      if (spec && spec.mergedMoralImage) {
-        return `<div class="scene-sky sketchbook">${bgImgTag({merged_image: spec.mergedMoralImage})}</div>
-                <div class="scene-vignette"></div>`;
-      }
-      return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;
-                           padding:28px 20px;height:100%;box-sizing:border-box;
-                           background:linear-gradient(145deg,#fffde7,#fff9c4);
-                           border-radius:10px 0 0 10px;justify-content:center;">
-        ${SD.moral
-          ? `<div class="moral-big-icon">💡</div>
-             <div class="moral-label-text">이야기의 교훈</div>
-             <p class="moral-body">${SD.moral}</p>`
-          : `<div class="moral-big-icon">📖</div>
-             <p class="moral-body">재미있는 이야기였나요?</p>`}
-      </div>`;
-    }
-
-    function makeEndRightHTML() {
-      return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;">
-        <div class="end-big-icon">🎉</div>
-        <h2 class="end-heading">끝!</h2>
-        <div class="end-actions">
-          <a href="/collection" class="btn btn-yellow">✨ 새 동화 만들기</a>
-          <a href="/library"    class="btn btn-blue">📚 도서관으로</a>
-          <button class="btn btn-white" id="delete-story-btn">🗑️ 삭제</button>
-        </div>
-      </div>`;
-    }
-
-    function makeMoralLeftDrawingsHTML(drawingsList, spec) {
+    function makeMoralLeftDrawingsHTML(drawingsList) {
       const bgImgHtml = `<img src="/static/images/sketchbook.png" alt="스케치북" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;z-index:1;" onerror="this.style.display='none'">`;
       const list = drawingsList || [];
       const count = list.length;
@@ -615,7 +573,7 @@
             rightInnerHTML: `<p class="story-text">${text}</p>`,
           });
         } else if (spec.type === 'moral') {
-          pages.push({ leftHTML: makeMoralLeftDrawingsHTML(pDrawings, spec), rightInnerHTML: makeMoralAndEndRightHTML() });
+          pages.push({ leftHTML: makeMoralLeftDrawingsHTML(pDrawings), rightInnerHTML: makeMoralAndEndRightHTML() });
         }
       }
     } else {
