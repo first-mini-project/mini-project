@@ -661,11 +661,14 @@ body {
 
 /* Story Typography Flat */
 .story-title {
-  font-size: 2rem;
+  font-size: clamp(1.2rem, 3.5vw, 2rem);
   text-align: center;
   margin-bottom: 1rem;
   border-bottom: 4px solid #f0f0f0;
   padding-bottom: 1rem;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  line-height: 1.35;
 }
 .story-page-content {
   flex-grow: 1;
@@ -1018,6 +1021,7 @@ body {
 .archive-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-auto-rows: 120px;
   gap: 30px 10px;
   justify-items: center;
   padding: 20px;
@@ -1026,6 +1030,14 @@ body {
   flex-grow: 1;
   overflow-y: auto;
   border: 3px dashed #d68b39;
+}
+
+/* archive-grid 안에서 책 높이가 0이 되는 문제 방지 */
+.archive-grid .book-cover.landscape,
+.archive-grid .book-cover.portrait {
+  max-height: unset;
+  width: 110px;
+  height: 100px;
 }
 
 /* --- Media Query for Responsive Scaling (Max-width: 1240px) --- */
