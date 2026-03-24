@@ -90,6 +90,7 @@
 
   // ─── 풍선 터트리기 ──────────────────────────────────────────────
   function popBalloon(el, pts, cx, cy) {
+    SFX.balloon();
     const emoji = el.querySelector(".balloon-body").textContent;
     const rect = el.getBoundingClientRect();
 
