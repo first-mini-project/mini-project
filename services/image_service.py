@@ -373,8 +373,8 @@ def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
             # SD-Turbo 스펙: 1~4 step
             image = pipe(
                 prompt=positive,
-                num_inference_steps=1,
-                guidance_scale=0.0,
+                num_inference_steps=8,
+                guidance_scale=2.0,
                 height=512,
                 width=512,
             ).images[0]
@@ -459,11 +459,14 @@ def generate_reference_image(
     Returns: base64 data URI string, or None on failure
     """
     prompt = image_prompt or (
-        f"single {english_word}, simple outline drawing, "
-        f"thick black border, flat solid color fill, basic shape, "
-        f"isolated on pure white background, nothing else, "
-        f"no face, no expression, no extra objects, no background pattern, "
-        f"children coloring book page, one object only"
+        f"a {english_word}, cute cartoon illustration for toddlers, "
+        f"coloring book style, very thick black outline, simple recognizable shape, "
+        f"flat bright colors, extremely minimal details, large and centered, "
+        f"pure white background, easy to trace and copy, "
+        f"picture book art style, suitable for 4 year old children, "
+        f"one single object only, no background, no text, no patterns, "
+        f"not anthropomorphized, no face on object, no human features, "
+        f"no arms, no legs, no eyes on non-living things"
     )
 
     try:
