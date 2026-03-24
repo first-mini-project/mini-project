@@ -522,11 +522,7 @@ def generate_image_prompt(korean_word: str, english_word: str) -> str:
     Claude를 사용해 DALL-E 이미지 생성용 프롬프트를 최적화합니다.
     """
     if not Config.ANTHROPIC_API_KEY:
-        return (
-            f"A cute chibi cartoon {english_word}, simple round soft shapes, thick black outlines, "
-            f"bright flat pastel colors, friendly happy expression, pure white background, "
-            f"children's coloring book style, single centered object, no text, no scary details"
-        )
+        return f"A cute, simple children's drawing of a {english_word}, colorful cartoon style, white background, no text"
 
     try:
         import anthropic
@@ -540,14 +536,11 @@ def generate_image_prompt(korean_word: str, english_word: str) -> str:
                 {
                     "role": "user",
                     "content": (
-                        f"Write a Flux image generation prompt (max 50 words) for a children's coloring book page "
-                        f"showing '{english_word}' (Korean: {korean_word}). "
-                        f"The object MUST be '{english_word}'. "
-                        f"Style requirements: bold thick black outline, flat simple colors, kawaii cute style, "
-                        f"pure white background, single large centered object, very simple shapes, "
-                        f"friendly happy expression, suitable for a 4-year-old to trace. "
-                        f"Start with: 'children's coloring book page, single {english_word}'. "
-                        f"Give only the prompt, no explanation."
+                        f"Create a DALL-E image prompt (max 60 words) for a children's drawing reference "
+                        f"of '{korean_word}' ({english_word}). "
+                        f"Style: cute, simple, colorful cartoon on white background, no text, "
+                        f"suitable for 4-7 year olds to use as drawing reference. "
+                        f"Give only the prompt text, nothing else."
                     ),
                 }
             ],
@@ -556,11 +549,7 @@ def generate_image_prompt(korean_word: str, english_word: str) -> str:
 
     except Exception as e:
         print(f"[이미지 프롬프트 생성 오류] {e}")
-        return (
-            f"A cute chibi cartoon {english_word}, simple round soft shapes, thick black outlines, "
-            f"bright flat pastel colors, friendly happy expression, pure white background, "
-            f"children's coloring book style, single centered object, no text, no scary details"
-        )
+        return f"A cute, simple children's drawing of a {english_word}, colorful cartoon style, white background, no text"
 
 
 def _fallback_story(keywords: list) -> dict:

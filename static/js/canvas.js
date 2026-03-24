@@ -71,6 +71,7 @@
     if (history.length <= 1) return;
     history.pop();
     ctx.putImageData(history[history.length - 1], 0, 0);
+    SFX.undo();
   }
 
   // ─── 그리기 유틸 ────────────────────────────────────────────────────────────
@@ -191,6 +192,7 @@
       isEraser = false;
       resetActiveStates();
       btn.classList.add("active");
+      SFX.paint();
     });
   });
 
@@ -206,9 +208,9 @@
       btn.classList.add("active");
       isEraser = false;
 
-      if (btn.id === "rainbow-btn") currentMode = "rainbow";
-      if (btn.id === "sparkle-btn") currentMode = "sparkle";
-      if (btn.id === "stamp-btn") currentMode = "stamp";
+      if (btn.id === "rainbow-btn") { currentMode = "rainbow"; SFX.sparkle(); }
+      else if (btn.id === "sparkle-btn") { currentMode = "sparkle"; SFX.sparkle(); }
+      else if (btn.id === "stamp-btn") { currentMode = "stamp"; SFX.stamp(); }
     });
   });
 
@@ -225,6 +227,8 @@
       currentSize = parseInt(btn.dataset.size);
       sizeBtns.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
+      const sizeKey = btn.classList.contains("size-btn-s") ? "s" : btn.classList.contains("size-btn-l") ? "l" : "m";
+      SFX.bell(sizeKey);
     });
   });
 
@@ -235,7 +239,7 @@
       isEraser = !isEraser;
       currentMode = "pen";
       resetActiveStates();
-      if (isEraser) eraserBtn.classList.add("active");
+      if (isEraser) { eraserBtn.classList.add("active"); SFX.erase(); }
     });
   }
 
@@ -244,6 +248,7 @@
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
       if (!confirm("그림을 모두 지울까요?")) return;
+      SFX.sweep();
       ctx.fillStyle = "#FFFFFF";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       saveHistory();
@@ -288,6 +293,7 @@
         const data = await res.json();
 
         if (data.success) {
+          SFX.save();
           showPraiseModal();
         } else {
           alert("저장 실패: " + data.error);

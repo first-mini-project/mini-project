@@ -442,133 +442,22 @@ def generate_reference_image(
     korean_word: str, english_word: str, image_prompt: str = None
 ) -> str | None:
     """
-    아이가 그림 그릴 때 보여줄 참고 이미지 생성.
-    1순위: DALL-E 3 (가장 정확, 지시 잘 따름)
-    2순위: Pollinations Flux (OPENAI 키 없을 때)
-    3순위: 로컬 SD-Turbo (인터넷 없을 때)
+    아이가 그림 그릴 때 보여줄 참고 이미지를 기존 HF 단일 API에서
+    로컬 최적화 파이프라인 생성을 사용하도록 변경합니다.
     Returns: base64 data URI string, or None on failure
     """
     prompt = image_prompt or (
-        f"flat vector sticker icon of a {english_word}, "
-        f"single {english_word} object only, bold black outline, solid bright colors, "
-        f"pure white background, simple 2D flat design, instantly recognizable shape, "
-        f"no face, no eyes, no character, no kawaii"
+        f"single {english_word}, simple outline drawing, "
+        f"thick black border, flat solid color fill, basic shape, "
+        f"isolated on pure white background, nothing else, "
+        f"no face, no expression, no extra objects, no background pattern, "
+        f"children coloring book page, one object only"
     )
 
-    flux_prompt = (
-        f"flat vector sticker icon of a {english_word}, "
-        f"single {english_word} only, bold black outline, solid bright flat colors, "
-        f"pure white background, simple 2D icon design, "
-        f"instantly recognizable {english_word} shape, sticker style"
-    )
-    flux_negative = (
-        "character, person, human, face, eyes, mouth, nose, smile, kawaii, chibi, "
-        "anthropomorphic, cute character, holding, carrying, "
-        "complex background, detailed, photorealistic, 3d render, watercolor, painting, "
-        "multiple objects, text, scary, dark, shadow"
-    )
-
-    # 1순위: DALL-E 3
-    if Config.OPENAI_API_KEY:
-        result = _generate_reference_dalle(prompt)
-        if result:
-            return result
-
-    # 2순위: HuggingFace FLUX.1-schnell
-    if Config.HUGGINGFACE_API_KEY:
-        result = _generate_reference_hf(flux_prompt)
-        if result:
-            return result
-
-    # 3순위: Pollinations Flux
-    result = _generate_reference_pollinations(flux_prompt, flux_negative, english_word)
-    if result:
-        return result
-
-    # 4순위: 로컬 SD-Turbo
-    return _generate_reference_local(flux_prompt)
-
-
-def _generate_reference_dalle(prompt: str) -> str | None:
-    """DALL-E 3로 참고 이미지 생성, base64 반환"""
-    try:
-        from openai import OpenAI
-        import base64
-
-        client = OpenAI(api_key=Config.OPENAI_API_KEY)
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt=prompt,
-            size="1024x1024",
-            quality="standard",
-            n=1,
-        )
-        image_url = response.data[0].url
-        img_response = requests.get(image_url, timeout=30)
-        if img_response.status_code != 200:
-            return None
-        img_str = base64.b64encode(img_response.content).decode("utf-8")
-        print(f"[DALL-E 3 밑그림] 생성 완료")
-        return f"data:image/jpeg;base64,{img_str}"
-
-    except Exception as e:
-        print(f"[DALL-E 3 밑그림 오류] {e}")
-        return None
-
-
-def _generate_reference_hf(prompt: str) -> str | None:
-    """HuggingFace Inference API (FLUX.1-schnell)로 참고 이미지 생성, base64 반환"""
-    try:
-        import base64
-
-        url = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
-        headers = {"Authorization": f"Bearer {Config.HUGGINGFACE_API_KEY}"}
-        payload = {"inputs": prompt, "parameters": {"width": 512, "height": 512}}
-        resp = requests.post(url, headers=headers, json=payload, timeout=60)
-        if resp.status_code != 200:
-            print(f"[HF 밑그림] 응답 오류: {resp.status_code} {resp.text[:200]}")
-            return None
-
-        img_str = base64.b64encode(resp.content).decode("utf-8")
-        print(f"[HF FLUX.1-schnell 밑그림] 생성 완료")
-        return f"data:image/jpeg;base64,{img_str}"
-
-    except Exception as e:
-        print(f"[HF 밑그림 오류] {e}")
-        return None
-
-
-def _generate_reference_pollinations(positive: str, negative: str, seed_key: str) -> str | None:
-    """Pollinations.ai Flux 모델로 참고 이미지 생성, base64 반환"""
-    try:
-        encoded = urllib.parse.quote(positive)
-        neg_encoded = urllib.parse.quote(negative)
-        seed = abs(hash(seed_key)) % 100000
-        url = (
-            f"https://image.pollinations.ai/prompt/{encoded}"
-            f"?negative={neg_encoded}&width=512&height=512"
-            f"&seed={seed}&nologo=true&model=flux"
-        )
-        resp = requests.get(url, timeout=30)
-        if resp.status_code != 200:
-            print(f"[Pollinations 밑그림] 응답 오류: {resp.status_code}")
-            return None
-
-        import base64
-        img_str = base64.b64encode(resp.content).decode("utf-8")
-        print(f"[Pollinations 밑그림] 생성 완료")
-        return f"data:image/jpeg;base64,{img_str}"
-
-    except Exception as e:
-        print(f"[Pollinations 밑그림 오류] {e}")
-        return None
-
-
-def _generate_reference_local(prompt: str) -> str | None:
-    """로컬 SD-Turbo 폴백 생성"""
     try:
         pipe = _get_pipe()
         if pipe is None:
+            print("[밑그림] 파이프라인 로딩 오류")
             return None
 
         # LCM 4~8 step 생성
@@ -580,7 +469,9 @@ def _generate_reference_local(prompt: str) -> str | None:
             width=512,
         ).images[0]
 
-        import io, base64
+        import io
+        import base64
+
         buffered = io.BytesIO()
         image.save(buffered, format="JPEG", quality=85)
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
