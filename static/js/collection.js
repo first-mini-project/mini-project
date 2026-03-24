@@ -603,13 +603,16 @@
       const data = await res.json();
       clearInterval(msgInterval);
       if (data.success) {
+        SFX.celebrate();
         if (data.level_up_info) {
           showLevelUpModal(data.level_up_info);
           setTimeout(() => {
             window.location.href = `/story/${data.story_id}`;
           }, 4000);
         } else {
-          window.location.href = `/story/${data.story_id}`;
+          setTimeout(() => {
+            window.location.href = `/story/${data.story_id}`;
+          }, 1500);
         }
       } else {
         loading.classList.remove("show");
