@@ -170,60 +170,6 @@ def get_all_words():
         return [dict(r) for r in rows]
 
 
-def get_words_with_latest_drawing():
-    """모든 단어 + 각 단어의 최신 그림(없으면 None)을 반환합니다."""
-    with get_db() as conn:
-        rows = conn.execute("""
-            SELECT w.id, w.korean, w.english, w.emoji, w.category,
-                   d.id   AS drawing_id,
-                   d.file_path AS drawing_path,
-                   d.created_at AS drawn_at
-            FROM words w
-            LEFT JOIN drawings d
-              ON d.word_id = w.id
-              AND d.created_at = (
-                  SELECT MAX(d2.created_at) FROM drawings d2 WHERE d2.word_id = w.id
-              )
-            ORDER BY w.category, w.korean
-        """).fetchall()
-        return [dict(r) for r in rows]
-
-
-def get_words_by_ids(word_ids):
-    """word_id 목록으로 단어 정보를 반환합니다 (순서 보존)."""
-    if not word_ids:
-        return []
-    placeholders = ",".join("?" * len(word_ids))
-    with get_db() as conn:
-        rows = conn.execute(
-            f"SELECT * FROM words WHERE id IN ({placeholders})", word_ids
-        ).fetchall()
-        rows_map = {row["id"]: dict(row) for row in rows}
-        return [rows_map[i] for i in word_ids if i in rows_map]
-
-
-def get_latest_drawings_for_words(word_ids):
-    """word_id 목록에서 각 단어의 최신 그림을 반환합니다 (그림 없는 단어는 제외)."""
-    if not word_ids:
-        return []
-    placeholders = ",".join("?" * len(word_ids))
-    with get_db() as conn:
-        rows = conn.execute(
-            f"""
-            SELECT d.id, d.word_id, d.image_data, d.file_path, d.created_at,
-                   w.korean, w.english, w.emoji
-            FROM drawings d JOIN words w ON d.word_id = w.id
-            WHERE d.word_id IN ({placeholders})
-              AND d.created_at = (
-                  SELECT MAX(d2.created_at) FROM drawings d2 WHERE d2.word_id = d.word_id
-              )
-        """,
-            word_ids,
-        ).fetchall()
-        rows_map = {row["word_id"]: dict(row) for row in rows}
-        # word_ids 순서를 유지하되 그림 없는 단어는 None으로
-        return [rows_map.get(wid) for wid in word_ids]
-
 
 def save_drawing(word_id, image_data, file_path=None):
     with get_db() as conn:

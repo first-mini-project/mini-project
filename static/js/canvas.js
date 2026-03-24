@@ -272,10 +272,31 @@
   const saveBtn = document.getElementById("save-btn");
   const praiseModal = document.getElementById("praise-modal");
 
+  function removeWhiteBg(sourceCanvas) {
+    const offscreen = document.createElement("canvas");
+    offscreen.width = sourceCanvas.width;
+    offscreen.height = sourceCanvas.height;
+    const offCtx = offscreen.getContext("2d");
+    offCtx.drawImage(sourceCanvas, 0, 0);
+    const imgData = offCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      if (r > 240 && g > 240 && b > 240) {
+        d[i + 3] = 0;
+      } else if (r > 225 && g > 225 && b > 225) {
+        const diff = Math.max(r, g, b) - 225;
+        d[i + 3] = Math.round((1 - diff / 30) * 255);
+      }
+    }
+    offCtx.putImageData(imgData, 0, 0);
+    return offscreen.toDataURL("image/png");
+  }
+
   if (saveBtn) {
     saveBtn.addEventListener("click", async () => {
       const wordId = saveBtn.dataset.wordId;
-      const imageData = canvas.toDataURL("image/png");
+      const imageData = removeWhiteBg(canvas);
 
       saveBtn.disabled = true;
       saveBtn.textContent = "저장 중...";

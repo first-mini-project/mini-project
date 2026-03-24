@@ -6,7 +6,7 @@ import sys
 import warnings
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from PIL import Image, ImageOps
+from PIL import Image
 
 # SD 파이프라인 safety_checker 경고 억제 (로컬 전용 앱)
 warnings.filterwarnings("ignore", message=".*safety_checker.*")
@@ -354,13 +354,14 @@ def generate_scene_bg(bg_text: str, exclude_en: list = None) -> str | None:
 
     positive, negative = _build_bg_prompt(bg_text, exclude_en)
 
-    # 1. 로컬 GPU 시도 (sd-turbo: guidance_scale=0이라 negative_prompt 효과 없음 → positive만 사용)
+    # 1. 로컬 GPU (LCM: guidance_scale > 0이므로 negative_prompt 효과 있음)
     pipe = _get_pipe()
     if pipe is not None:
         try:
             # LCM 스펙: 4~8 step, guidance_scale 1~2
             image = pipe(
                 prompt=positive,
+                negative_prompt=negative,
                 num_inference_steps=8,
                 guidance_scale=2.0,
                 height=512,
@@ -485,56 +486,3 @@ def generate_reference_image(
         return None
 
 
-def generate_story_illustration(title: str, keywords: list) -> str | None:
-    """
-    동화 일러스트를 DALL-E 3로 생성하고 파일로 저장합니다.
-    Returns: relative static path like 'static/generated/illustrations/xxx.png', or None
-    """
-    try:
-        keywords_str = ", ".join(keywords[:3])
-        prompt = (
-            f"A beautiful, colorful children's book illustration for a Korean fairy tale. "
-            f"The story is called '{title}' and features: {keywords_str}. "
-            f"Soft watercolor style, warm colors, cute friendly characters, magical atmosphere. "
-            f"Full scene illustration, no text, suitable for children ages 4-7. "
-            f"Studio Ghibli inspired, dreamy and gentle."
-        )
-
-        filename = f"story_{uuid.uuid4().hex[:16]}.jpg"
-        filepath = os.path.join(Config.ILLUSTRATIONS_DIR, filename)
-
-        if Config.OPENAI_API_KEY:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=Config.OPENAI_API_KEY)
-            response = client.images.generate(
-                model="dall-e-3",
-                prompt=prompt,
-                size="1024x1024",
-                quality="standard",
-                n=1,
-            )
-            image_url = response.data[0].url
-            img_response = requests.get(image_url, timeout=30)
-            with open(filepath, "wb") as f:
-                f.write(img_response.content)
-            return f"static/generated/illustrations/{filename}"
-        else:
-            # Pollinations 폴백 생성 (무료 API)
-            print("[DALL-E 키 없음] Pollinations로 표지 일러스트 생성 중...")
-            encoded = urllib.parse.quote(prompt)
-            seed = abs(hash(title)) % 100000
-            url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&seed={seed}&nologo=true&model=flux"
-            resp = requests.get(url, timeout=35)
-            if resp.status_code == 200:
-                with open(filepath, "wb") as f:
-                    f.write(resp.content)
-                print(f"[Pollinations 일러스트] 생성 완료: {filename}")
-                return f"static/generated/illustrations/{filename}"
-            else:
-                print(f"[Pollinations 일러스트 오류] 상태 코드: {resp.status_code}")
-                return None
-
-    except Exception as e:
-        print(f"[동화 일러스트 생성 오류] {e}")
-        return None

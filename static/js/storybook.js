@@ -88,7 +88,7 @@
   const DECO_HTML = {
     space: `<div class="deco s1"></div><div class="deco s2"></div><div class="deco s3"></div><div class="deco s4"></div><div class="deco s5"></div>`,
     moon: `<div class="deco s1"></div><div class="deco s2"></div><div class="deco s3"></div><div class="deco moon-orb"></div>`,
-    ocean: `<div class="deco b1"></div><div class="deco b2"></div><div class="deco b3"></div><div class="deco wave-deco"></div>`,
+    ocean: `<div class="deco wave-deco"></div>`,
     cloudkingdom: `<div class="deco c1"></div><div class="deco c2"></div><div class="deco c3"></div>`,
     ice: `<div class="deco snow1"></div><div class="deco snow2"></div><div class="deco snow3"></div><div class="deco aurora-line"></div>`,
     circus: `<div class="deco sp1"></div><div class="deco sp2"></div><div class="deco sp3"></div><div class="deco sp4"></div>`,
@@ -551,6 +551,7 @@
   function makeDrawingPageHTML(primary, secondary, scene, tertiary, quaternary, quinary) {
     const bgText = scene && scene.bg ? scene.bg : "";
     const sceneText = scene && scene.text ? scene.text : "";
+    const hints = (scene && scene.layoutHints) ? scene.layoutHints : {};
     const kwList = [
       ...[primary, secondary, tertiary, quaternary, quinary]
         .filter(Boolean).map((d) => d.korean),
@@ -559,17 +560,35 @@
     const theme = getTheme(bgText, kwList);
     const deco = DECO_HTML[theme.type] || "";
 
-    // 스토리 텍스트 기반 그림 크기 계산
-    const pScale = getDrawingScale(primary && primary.korean, sceneText);
-    // secondary는 primary 스케일의 85% 상한을 두어 항상 primary보다 작게 유지
-    const sScaleRaw = getDrawingScale(secondary && secondary.korean, sceneText);
+    // layout_hints에서 size → scale 변환
+    const SIZE_MAP = { large: 1.45, normal: 1.0, small: 0.7 };
+    function hintScale(d) {
+      if (!d) return null;
+      const h = hints[String(d.id)];
+      return h && h.size ? (SIZE_MAP[h.size] ?? null) : null;
+    }
+    // layout_hints에서 pos → sky/ground 분류
+    function hintPos(d) {
+      if (!d) return null;
+      const h = hints[String(d.id)];
+      return h ? h.pos : null;
+    }
+
+    // 스토리 텍스트 기반 그림 크기 계산 (힌트 우선)
+    const pScale = hintScale(primary) ?? getDrawingScale(primary && primary.korean, sceneText);
+    const sScaleRaw = hintScale(secondary) ?? getDrawingScale(secondary && secondary.korean, sceneText);
     const sScale = Math.min(sScaleRaw, pScale * 0.85);
 
     // 장면 맥락 분석
     const underwater = isUnderwater(bgText);
-    // 하늘 그림을 '꿈꾸는 효과'로 보여줄지 결정:
-    // 수중 배경이거나, 텍스트에서 상상/소원 문맥으로 언급될 때
+
+    // 하늘/땅 분류: layout_hints 우선, 없으면 기존 로직
     function skyClass(d) {
+      const pos = hintPos(d);
+      if (pos === "sky") return underwater ? "dream" : "sky";
+      if (pos === "sky-right") return underwater ? "sky-right dream" : "sky-right";
+      if (pos === "ground" || pos === "ground-foreground") return null;
+      // 힌트 없으면 기존 로직
       if (!isSky(d, sceneText)) return null;
       if (underwater || isDreamContext(d.korean, sceneText)) return "dream";
       return "sky";
@@ -583,15 +602,15 @@
     const scaledList = [
       { d: primary,    baseScale: pScale },
       { d: secondary,  baseScale: sScale },
-      { d: tertiary,   baseScale: tertiary   ? Math.min(getDrawingScale(tertiary.korean,   sceneText), pScale * 0.75) : 1 },
-      { d: quaternary, baseScale: quaternary ? Math.min(getDrawingScale(quaternary.korean, sceneText), pScale * 0.70) : 1 },
-      { d: quinary,    baseScale: quinary    ? Math.min(getDrawingScale(quinary.korean,    sceneText), pScale * 0.65) : 1 },
+      { d: tertiary,   baseScale: tertiary   ? (hintScale(tertiary)   ?? Math.min(getDrawingScale(tertiary.korean,   sceneText), pScale * 0.75)) : 1 },
+      { d: quaternary, baseScale: quaternary ? (hintScale(quaternary) ?? Math.min(getDrawingScale(quaternary.korean, sceneText), pScale * 0.70)) : 1 },
+      { d: quinary,    baseScale: quinary    ? (hintScale(quinary)    ?? Math.min(getDrawingScale(quinary.korean,    sceneText), pScale * 0.65)) : 1 },
     ].filter((e) => e.d);
 
     const groundList = scaledList.filter((e) => !skyClass(e.d));
     const skyList    = scaledList.filter((e) =>  skyClass(e.d));
 
-    // 지상 캐릭터 배치
+    // 지상 캐릭터 배치 (ground-foreground 힌트는 중앙 전면으로)
     const GROUND_LAYOUTS = {
       1: [""],
       2: ["ground-pair-l", "ground-pair-r"],
@@ -599,10 +618,12 @@
       4: ["ground-quad-1", "ground-quad-2", "ground-quad-3", "ground-quad-4"],
       5: ["ground-quint-1", "ground-quint-2", "ground-quint-3", "ground-quint-4", "ground-quint-5"],
     };
-    const shrink = [1, 1, 1, 0.88, 0.80]; // 인원수에 따라 전체 축소 비율
+    const shrink = [1, 1, 1, 0.88, 0.80];
     const classes = GROUND_LAYOUTS[Math.min(groundList.length, 5)] || [];
     groundList.forEach((e, i) => {
-      html += groundStageHTML(e.d, classes[i] || "", e.baseScale * (shrink[groundList.length - 1] ?? 0.75));
+      const pos = hintPos(e.d);
+      const cls = pos === "ground-foreground" ? "ground-foreground" : (classes[i] || "");
+      html += groundStageHTML(e.d, cls, e.baseScale * (shrink[groundList.length - 1] ?? 0.75));
     });
 
     // 하늘 캐릭터 배치

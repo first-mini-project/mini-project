@@ -83,6 +83,15 @@ block nav_title %}{{ story.title }}{% endblock %} {% block content %}
     right: 0;
     padding-bottom: 10px;
   }
+  /* 전면 강조 배치: 중앙 하단, z-index 높게 */
+  .drawing-stage.ground-foreground {
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    z-index: 12;
+    padding-bottom: 6px;
+  }
   /* 보조 그림: 우측 하단, 작게 (단독 보조일 때) */
   .drawing-stage.ground-sub {
     bottom: 0;

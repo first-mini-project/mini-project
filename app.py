@@ -285,36 +285,53 @@ def api_generate_story():
             keywords, drawings, protagonist_kw=protagonist_kw
         )
 
-        # 2. AI 배경 이미지 생성
-        # 아이가 그린 모든 그림의 키워드를 모든 배경에서 제외 (아이 그림이 메인 캐릭터)
+        # 2~5. 배경이미지 / 일러스트 / TTS / 콜라주 병렬 생성
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        full_text = f"{story_data['title']}. {story_data['content']} {story_data.get('moral', '')}"
+
+        # 배경 이미지 준비 (exclude_en 세팅)
         if story_data.get("scene_data"):
             kw_to_en = {
                 d["korean"]: d.get("english", "") for d in drawings if d.get("english")
             }
-            # 모든 그림의 영어 키워드 목록 (전체 장면 공통 제외 목록)
             all_exclude_en = [v for v in kw_to_en.values() if v]
             for scene in story_data["scene_data"]:
                 scene["exclude_en"] = all_exclude_en
-            story_data["scene_data"] = image_service.generate_scene_bgs_parallel(
-                story_data["scene_data"]
-            )
-            story_data["scene_data"] = image_service.flatten_scene_images(
-                story_data["scene_data"], drawings
-            )
 
-        # 3. DALL-E로 일러스트 생성 (OpenAI 키 없으면 skip)
-        illustration_path = image_service.generate_story_illustration(
-            story_data["title"], keywords
-        )
+        def task_bg():
+            if not story_data.get("scene_data"):
+                return None
+            scene_data = image_service.generate_scene_bgs_parallel(story_data["scene_data"])
+            return image_service.flatten_scene_images(scene_data, drawings)
 
-        # 4. gTTS로 음성 생성
-        full_text = f"{story_data['title']}. {story_data['content']} {story_data.get('moral', '')}"
-        audio_path = tts_service.generate_tts(full_text, slow=False)
+        def task_tts():
+            return tts_service.generate_tts(full_text, slow=False)
 
-        # 5. 교훈 페이지 콜라주 생성
-        merged_moral_path = image_service.generate_moral_collage(
-            story_data.get("moral", ""), drawings
-        )
+        def task_collage():
+            return image_service.generate_moral_collage(story_data.get("moral", ""), drawings)
+
+        audio_path = None
+        merged_moral_path = None
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(task_bg): "bg",
+                executor.submit(task_tts): "tts",
+                executor.submit(task_collage): "collage",
+            }
+            for future in as_completed(futures):
+                key = futures[future]
+                try:
+                    result = future.result()
+                    if key == "bg" and result is not None:
+                        story_data["scene_data"] = result
+                    elif key == "tts":
+                        audio_path = result
+                    elif key == "collage":
+                        merged_moral_path = result
+                except Exception as e:
+                    print(f"[병렬 생성 오류 - {key}] {e}")
 
         # 6. layout_data 생성 (정확한 스프레드 배치 저장)
         scenes = story_data.get("scene_data", [])
@@ -462,6 +479,17 @@ def api_generate_story():
                 f"         → {[id_to_kw.get(x) for x in [primary_id, secondary_id, tertiary_id, quaternary_id, quinary_id] if x]}"
             )
 
+            # layout_hints: 키워드→id로 변환 (JS에서 drawingId 기반으로 사용)
+            raw_hints = scene.get("layout_hints") or {}
+            layout_hints_by_id = {}
+            for kw, hint in raw_hints.items():
+                did = kw_to_id.get(kw) or char_name_to_id.get(kw)
+                if not did:
+                    stripped = re.sub(r"(이가|가|이는|는|을|를|과|와|으로|로)$", "", kw)
+                    did = kw_to_id.get(stripped) or char_name_to_id.get(stripped)
+                if did:
+                    layout_hints_by_id[str(did)] = hint
+
             layout_spreads.append(
                 {
                     "type": "content",
@@ -473,6 +501,7 @@ def api_generate_story():
                     "quinaryDrawingId":    quinary_id,
                     "mergedImage": scene.get("merged_image") if scene else None,
                     "textPageNum": i + 1,
+                    "layoutHints": layout_hints_by_id,
                 }
             )
 
@@ -493,7 +522,7 @@ def api_generate_story():
             moral=story_data.get("moral", ""),
             keywords=keywords,
             drawing_ids=[d["id"] for d in drawings],
-            illustration_path=illustration_path,
+            illustration_path=None,
             audio_path=audio_path,
             scene_data=story_data.get("scene_data"),
             layout_data=layout_data,

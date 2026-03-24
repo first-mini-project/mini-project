@@ -317,14 +317,14 @@ def _build_prompt(
   "title": "동화 제목 (10자 이내)",
   "name_map": {{"원래단어": "캐릭터이름"}},
   "scenes": [
-    {{"text": "단락1 (2~3문장)", "bg": "{bg_rule}", "present": ["이 장면에 실제 등장하는 원래 단어 목록"]}},
-    {{"text": "단락2", "bg": "{bg_rule}", "present": []}},
-    {{"text": "단락3", "bg": "{bg_rule}", "present": []}},
-    {{"text": "단락4", "bg": "{bg_rule}", "present": []}}
+    {{"text": "단락1 (2~3문장)", "bg": "{bg_rule}", "present": ["이 장면에 실제 등장하는 원래 단어 목록"], "layout_hints": {{"키워드": {{"pos": "ground", "size": "large"}}}}}},
+    {{"text": "단락2", "bg": "{bg_rule}", "present": [], "layout_hints": {{}}}},
+    {{"text": "단락3", "bg": "{bg_rule}", "present": [], "layout_hints": {{}}}},
+    {{"text": "단락4", "bg": "{bg_rule}", "present": [], "layout_hints": {{}}}}
   ],
   "moral": "이 이야기의 교훈: ..."
 }}
-⚠️ name_map과 present는 반드시 출력해야 하는 필수 필드입니다.
+⚠️ name_map, present, layout_hints는 반드시 출력해야 하는 필수 필드입니다.
 ※ name_map: 캐릭터에게 이름을 붙인 경우 반드시 기입. 예) {{"나무": "고목 할아버지", "토끼": "콩이"}}. 이름 없으면 빈 객체 {{}}
 ※ present: 각 장면마다 반드시 작성. 해당 장면 text에 이름이나 원래 단어가 직접 등장하는 캐릭터를 빠짐없이 포함.
   - ⚠️ text에서 "A와 B는 C를 만났어요" 형태면 A, B, C 모두 present에 포함해야 합니다 (누락 금지)
@@ -335,7 +335,14 @@ def _build_prompt(
     예) 동굴 배경 속 불꽃 도마뱀 → bg에만 묘사, present에는 미포함
     예) "저 멀리 산이 보였어요" → 산은 present 미포함
   - 예) "고목 할아버지가 손을 흔들었어요" → present에 "고목 할아버지" 또는 "나무" 포함
-  - 예) "나무가 알려준 지도를 꺼냈어요" → present에 나무 미포함 (직접 등장 아님)"""
+  - 예) "나무가 알려준 지도를 꺼냈어요" → present에 나무 미포함 (직접 등장 아님)
+※ layout_hints: present에 있는 각 키워드(또는 캐릭터 이름)의 배치 힌트. 스토리 맥락과 배경에 어울리게 지정하세요.
+  - pos: "sky"(하늘 중앙) | "sky-right"(하늘 우측) | "ground"(땅 기본) | "ground-foreground"(땅 전면/강조)
+  - size: "large"(크게, 주인공/강조) | "normal"(보통) | "small"(작게, 배경/멀리)
+  - 예) 하늘을 날고 있는 새 → {{"pos": "sky", "size": "large"}}
+  - 예) 멀리 있는 산 → {{"pos": "ground", "size": "small"}}
+  - 예) 주인공이 전면에 서있는 장면 → {{"pos": "ground-foreground", "size": "large"}}
+  - 예) 구름이 하늘 우측에 있는 장면 → {{"pos": "sky-right", "size": "normal"}}"""
 
 
 def _strip_markdown(text: str) -> str:
